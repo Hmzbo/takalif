@@ -11,3 +11,7 @@ data/
 *.sqlite-wal
 .DS_Store
 .vite/
+
+# Local working document: the roadmap for the maintainer. Not project
+# documentation, so it is deliberately not tracked.
+Plan.md
