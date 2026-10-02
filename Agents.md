@@ -9,7 +9,7 @@ invariants that must hold, and the git workflow we require.
 
 ## 1. What this project is
 
-MyWeeklies tracks **recurring commitments** — daily, weekly, monthly — and
+Takalif tracks **recurring commitments** — daily, weekly, monthly — and
 measures how faithfully they were kept over time.
 
 Two distinct objects:
@@ -61,8 +61,8 @@ Requires Node 22+ and pnpm.
 pnpm install
 pnpm test          # all packages
 pnpm typecheck
-pnpm --filter @myweeklies/core test
-pnpm --filter @myweeklies/server start
+pnpm --filter @takalif/core test
+pnpm --filter @takalif/server start
 ```
 
 `better-sqlite3` and `esbuild` need native build steps. These are allowlisted in

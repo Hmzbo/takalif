@@ -1,4 +1,4 @@
-# MyWeeklies
+# Takalif
 
 Track recurring commitments, and see how faithfully you actually kept them.
 
@@ -6,7 +6,7 @@ Most habit trackers ask "did you do the thing today?" and give you a streak.
 Most to-do apps ask "what did you plan?" and then forget the answer. Neither one
 can tell you how often you kept a promise you made to yourself in February.
 
-MyWeeklies is a small, self-hosted app for **recurring commitments** — daily,
+Takalif is a small, self-hosted app for **recurring commitments** — daily,
 weekly, monthly — and the **adherence record** you build up over time.
 
 ```
@@ -28,7 +28,7 @@ express "every second Tuesday" or "the last Friday of the month", and because
 everything is bucketed into day cells, "did I do the monthly review on time?"
 collapses into "was the September box green?"
 
-MyWeeklies keeps the two things separate:
+Takalif keeps the two things separate:
 
 - **The rule** — real recurrence, RFC 5545 RRULE. Every second Tuesday, the 1st
   of the month, weekdays only, the last Friday.
@@ -76,8 +76,8 @@ them to get right, because their data model cannot express it.
 ### Docker
 
 ```bash
-git clone https://github.com/<you>/myweeklies.git
-cd myweeklies
+git clone https://github.com/Hmzbo/takalif.git
+cd takalif
 docker compose up -d
 ```
 
@@ -89,7 +89,7 @@ Requires Node 22+ and pnpm.
 
 ```bash
 pnpm install
-pnpm --filter @myweeklies/server start
+pnpm --filter @takalif/server start
 ```
 
 The database is a single SQLite file. There is nothing else to configure, and no
@@ -116,7 +116,7 @@ Everything is optional; the defaults work.
 |---|---|---|
 | `PORT` | `8787` | HTTP port |
 | `HOST` | `127.0.0.1` | Bind address. Set `0.0.0.0` to expose on your network |
-| `DB_FILE` | `./data/myweeklies.sqlite` | SQLite database location |
+| `DB_FILE` | `./data/takalif.sqlite` | SQLite database location |
 | `WEB_DIST` | `./packages/web/dist` | Built PWA to serve, when present |
 
 The server is single-user by design: no accounts, no user table. If you expose it
@@ -219,7 +219,7 @@ pnpm typecheck
 
 ### What will not be accepted
 
-MyWeeklies is deliberately narrow, and keeping it narrow is what makes it
+Takalif is deliberately narrow, and keeping it narrow is what makes it
 useful:
 
 - One-off tasks, meetings, or calendar events. This is not a calendar.
