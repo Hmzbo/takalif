@@ -1,5 +1,5 @@
 {
-  "name": "myweeklies",
+  "name": "takalif",
   "version": "0.1.0",
   "private": true,
   "description": "Recurring commitment tracker with adherence analytics",
@@ -12,6 +12,6 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "dev": "pnpm --filter @myweeklies/server dev"
+    "dev": "pnpm --filter @takalif/server dev"
   }
 }
