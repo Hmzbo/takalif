@@ -1,4 +1,13 @@
-import { RRule } from 'rrule';
+import * as rrule from 'rrule';
+
+/**
+ * `rrule` ships as CommonJS, and Node's ESM named-export detection does not
+ * surface `RRule` on the module namespace. Resolve it from the default
+ * interop object when present, so this works identically under vitest and
+ * under a plain Node runtime.
+ */
+const { RRule } = (rrule as { default?: typeof rrule }).default ?? rrule;
+
 import { formatDate, parseDate, type LocalDate } from './dates.js';
 
 /**
@@ -44,7 +53,7 @@ export const expandRRule: RRuleExpander = ({ rrule, dtstart, from, to }) => {
     throw new InvalidRRuleError(rrule, error);
   }
 
-  let rule: RRule;
+  let rule: InstanceType<typeof RRule>;
   try {
     rule = new RRule({ ...options, dtstart: parseDate(dtstart) });
   } catch (error) {
