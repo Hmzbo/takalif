@@ -11,8 +11,9 @@ import {
   zonedTimeToUtc,
   type LocalDate,
 } from './dates.js';
-import { expandRRule, InvalidRRuleError } from './rrule.js';
+import { expandRRule, InvalidRRuleError, splitExDates } from './rrule.js';
 import {
+  DEFAULT_SETTINGS,
   isTerminal,
   type Exception,
   type Occurrence,
@@ -91,7 +92,38 @@ export interface GeneratorInput {
 
 export const DEFAULT_RECOVERY_THRESHOLD = 14;
 
+/**
+ * Upper bound on either half of the materialisation window.
+ *
+ * Ten years either side is far beyond any real use, and it keeps a corrupt
+ * settings row from turning every request into unbounded work.
+ */
+export const MAX_WINDOW_DAYS = 3660;
+
 const RULE_CHANGED_NOTE = 'schedule changed';
+
+/**
+ * Coerce a stored window bound to a sane integer.
+ *
+ * `settings` is user-writable over HTTP and SQLite has no numeric enforcement,
+ * so this value can arrive as a string, a float, `NaN`, or a number large enough
+ * to overflow `Date`. Degrading to the default here is what stops a single bad
+ * write from making every endpoint throw.
+ */
+export function safeWindowDays(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.min(Math.floor(n), MAX_WINDOW_DAYS);
+}
+
+/** Resolve today, falling back to UTC if the stored timezone is unusable. */
+function safeToday(settings: Settings, now: Date): LocalDate {
+  try {
+    return todayInTimeZone(settings.timezone, now);
+  } catch {
+    return todayInTimeZone('UTC', now);
+  }
+}
 
 /**
  * Pure planner. Reads state, returns a plan, touches nothing.
@@ -107,10 +139,10 @@ const RULE_CHANGED_NOTE = 'schedule changed';
 export function generatePlan(input: GeneratorInput): GeneratorPlan {
   const { settings, now = new Date(), recoveryThreshold = DEFAULT_RECOVERY_THRESHOLD } = input;
 
-  const today = todayInTimeZone(settings.timezone, now);
+  const today = safeToday(settings, now);
   const window = {
-    from: addDays(today, -Math.max(0, settings.lookbackDays)),
-    to: addDays(today, Math.max(0, settings.lookaheadDays)),
+    from: addDays(today, -safeWindowDays(settings.lookbackDays, DEFAULT_SETTINGS.lookbackDays)),
+    to: addDays(today, safeWindowDays(settings.lookaheadDays, DEFAULT_SETTINGS.lookaheadDays)),
   };
 
   const plan: GeneratorPlan = {
@@ -300,16 +332,11 @@ function skipStatusFor(date: LocalDate, periods: SkipPeriod[]): OccurrenceStatus
   return periods.some((p) => isWithin(date, p.startDate, p.endDate)) ? 'skipped' : 'pending';
 }
 
-/** Pull `EXDATE` entries out of an RRULE string so we can merge them with the exceptions table. */
+/** Pull `EXDATE` entries out of an RRULE so we can merge them with the exceptions table. */
 function extractExDates(rules: Rule[]): Set<string> {
   const out = new Set<string>();
   for (const rule of rules) {
-    const match = /EXDATE[^:\n]*:(.+)/i.exec(rule.rrule);
-    if (!match?.[1]) continue;
-    for (const raw of match[1].split(',')) {
-      const compact = raw.replace(/[^0-9]/g, '');
-      if (compact.length !== 8) continue;
-      const date = `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
+    for (const date of splitExDates(rule.rrule).exdates) {
       out.add(`${rule.id}|${date}`);
     }
   }

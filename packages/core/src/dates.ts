@@ -112,9 +112,19 @@ export function endOfMonth(date: LocalDate): LocalDate {
 // Timezone-aware helpers. These are the only functions that consult a clock.
 // ---------------------------------------------------------------------------
 
-/** Offset of `tz` from UTC, in ms, at the given instant. */
-function timeZoneOffsetMs(instant: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
+/**
+ * Cache `Intl.DateTimeFormat` per timezone.
+ *
+ * Constructing one costs tens of microseconds, and `timeZoneOffsetMs` is called
+ * per occurrence in the lateness calculation, so an uncached formatter turned a
+ * statistics query into a formatter-construction benchmark.
+ */
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function offsetFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = offsetFormatters.get(timeZone);
+  if (cached) return cached;
+  const created = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hour12: false,
     year: 'numeric',
@@ -123,7 +133,14 @@ function timeZoneOffsetMs(instant: Date, timeZone: string): number {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  }).formatToParts(instant);
+  });
+  offsetFormatters.set(timeZone, created);
+  return created;
+}
+
+/** Offset of `tz` from UTC, in ms, at the given instant. */
+function timeZoneOffsetMs(instant: Date, timeZone: string): number {
+  const parts = offsetFormatter(timeZone).formatToParts(instant);
 
   const field: Record<string, number> = {};
   for (const p of parts) {

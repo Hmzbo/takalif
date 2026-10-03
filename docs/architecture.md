@@ -178,7 +178,7 @@ docker compose up -d
 or
 
 ```bash
-pnpm --filter @myweeklies/server start
+pnpm --filter @takalif/server start
 ```
 
 The server serves both the API and the built PWA from a single process. There is

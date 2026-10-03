@@ -1,5 +1,37 @@
-import { RRule } from 'rrule';
+import * as rruleNamespace from 'rrule';
 import { formatDate, parseDate, type LocalDate } from './dates.js';
+
+/**
+ * `rrule` ships as CommonJS. Node's ESM named-export detection cannot see
+ * `RRule`, because the published `dist/es5` bundle is a webpack wrapper whose
+ * `module.exports = factory()` is not statically analysable. Bundlers instead
+ * resolve the `module` field to a real ESM build that *does* have named
+ * exports and no `default`.
+ *
+ * So: prefer `default.RRule` (Node ESM), fall back to `RRule` (bundler). The
+ * cast goes through `unknown` so it typechecks under both `bundler` and
+ * `NodeNext` module resolution.
+ */
+type RRuleCtor = typeof rruleNamespace.RRule;
+
+const rruleModule = rruleNamespace as unknown as {
+  default?: { RRule?: RRuleCtor };
+  RRule?: RRuleCtor;
+};
+
+const resolved = (rruleModule.default?.RRule ?? rruleModule.RRule) as
+  | RRuleCtor
+  | undefined;
+
+if (typeof resolved !== 'function') {
+  // Fail loudly at import time. A broken interop would otherwise surface as
+  // "every RRULE is invalid", which looks like user input error.
+  throw new Error(
+    'rrule: could not resolve the RRule constructor from the module namespace',
+  );
+}
+
+const RRule: RRuleCtor = resolved;
 
 /**
  * The single seam between our domain and an RRULE implementation.
@@ -18,13 +50,44 @@ export interface RRuleExpander {
 }
 
 export class InvalidRRuleError extends Error {
-  constructor(
-    rrule: string,
-    override readonly cause: unknown,
-  ) {
+  readonly rrule: string;
+
+  constructor(rrule: string, cause?: unknown) {
     super(`Invalid RRULE: ${rrule}`);
     this.name = 'InvalidRRuleError';
+    this.rrule = rrule;
+    // Assigned rather than a TS parameter property, so the class body is
+    // erasable-syntax only and stays loadable under Node's type stripping.
+    this.cause = cause;
   }
+}
+
+/**
+ * Split off `EXDATE` entries before handing the rule to the parser.
+ *
+ * `RRule.parseString` rejects any property it does not recognise, and `EXDATE`
+ * is an RFC 5545 *property*, not an RRULE part. A rule carrying an exclusion
+ * date would otherwise be rejected as invalid, even though we support
+ * exclusions — the generator merges them in separately.
+ */
+export function splitExDates(rule: string): { rule: string; exdates: string[] } {
+  const exdates: string[] = [];
+  const stripped = rule
+    .split(';')
+    .filter((part) => {
+      if (!/^EXDATE/i.test(part)) return true;
+      const value = part.slice(part.indexOf(':') + 1);
+      for (const token of value.split(',')) {
+        const compact = token.replace(/[^0-9]/g, '');
+        if (compact.length !== 8) continue;
+        exdates.push(
+          `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`,
+        );
+      }
+      return false;
+    })
+    .join(';');
+  return { rule: stripped, exdates };
 }
 
 /**
@@ -37,15 +100,11 @@ export class InvalidRRuleError extends Error {
 export const expandRRule: RRuleExpander = ({ rrule, dtstart, from, to }) => {
   if (from > to) return [];
 
-  let options: Partial<ConstructorParameters<typeof RRule>[0]>;
+  let rule: InstanceType<RRuleCtor>;
   try {
-    options = RRule.parseString(rrule.trim());
-  } catch (error) {
-    throw new InvalidRRuleError(rrule, error);
-  }
-
-  let rule: RRule;
-  try {
+    const { rule: withoutExdates } = splitExDates(rrule.trim());
+    const options = RRule.parseString(withoutExdates);
+    // Constructing forces semantic validation (bad BYDAY, COUNT<=0, etc.).
     rule = new RRule({ ...options, dtstart: parseDate(dtstart) });
   } catch (error) {
     throw new InvalidRRuleError(rrule, error);
@@ -59,16 +118,16 @@ export const expandRRule: RRuleExpander = ({ rrule, dtstart, from, to }) => {
   }
 
   return dates.map(formatDate);
-};
+}
 
 /**
  * Validate an RRULE without expanding it, so the API can reject a bad rule at
  * creation time instead of silently dropping occurrences later.
  */
-export function validateRRule(rrule: string, dtstart: LocalDate): boolean {
+export function validateRRule(rule: string, dtstart: LocalDate): boolean {
   try {
-    const options = RRule.parseString(rrule.trim());
-    // Constructing forces semantic validation (bad BYDAY, COUNT<=0, etc.).
+    const { rule: withoutExdates } = splitExDates(rule.trim());
+    const options = RRule.parseString(withoutExdates);
     new RRule({ ...options, dtstart: parseDate(dtstart) });
     return true;
   } catch {
