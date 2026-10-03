@@ -1,6 +1,6 @@
 # Overview
 
-MyWeeklies tracks **recurring commitments** and measures **how faithfully you kept
+Takalif tracks **recurring commitments** and measures **how faithfully you kept
 them over time**.
 
 It answers questions that other categories of software cannot:
@@ -80,7 +80,7 @@ The data becomes a lie, and an undetectable one.
 Neither category can answer the question, because neither can represent both a
 calendar-anchored schedule *and* a durable record of what was expected.
 
-MyWeeklies holds both at once.
+Takalif holds both at once.
 
 ---
 

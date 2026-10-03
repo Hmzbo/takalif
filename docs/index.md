@@ -1,6 +1,6 @@
 # Documentation
 
-Technical documentation for engineers working on or integrating with MyWeeklies.
+Technical documentation for engineers working on or integrating with Takalif.
 
 Read these in rough order:
 

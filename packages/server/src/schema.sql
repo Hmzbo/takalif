@@ -1,4 +1,4 @@
--- MyWeeklies schema
+-- Takalif schema
 -- Single-user by design: no users, no teams, no auth tables.
 --
 -- Tables are STRICT so SQLite refuses to store a TEXT value in an INTEGER
