@@ -4,7 +4,9 @@ import {
   buildReport,
   DEFAULT_SETTINGS,
   generatePlan,
+  safeWindowDays,
   todayInTimeZone,
+  zonedTimeToUtc,
   type Exception,
   type GeneratorPlan,
   type Occurrence,
@@ -225,6 +227,17 @@ export function materialize(db: DB, now: Date = new Date()): GeneratorPlan {
   });
 
   applyPlanToDb(db, plan);
+
+  // A rule that cannot expand stops generating occurrences, which *shrinks* the
+  // denominator and therefore silently *improves* the user's adherence. Make it
+  // loud, and let the HTTP layer surface it too.
+  if (plan.failedRules.length > 0) {
+    console.warn(
+      `[takalif] ${plan.failedRules.length} rule(s) failed to expand and will not generate occurrences:`,
+      plan.failedRules.map((f) => ({ ruleId: f.ruleId, rrule: f.rrule })),
+    );
+  }
+
   return plan;
 }
 
@@ -238,11 +251,18 @@ function applyPlanToDb(db: DB, plan: GeneratorPlan): void {
      ON CONFLICT (rule_id, scheduled_date) DO NOTHING`,
   );
 
+  // `pending` guard: terminal rows are frozen, so the generator can only ever
+  // move a row out of `pending`. COALESCE keeps a user note when the update
+  // carries none (a sweep, for instance), matching `applyPlan` semantics.
   const update = db.prepare(
-    'UPDATE occurrences SET status = @status, note = @note, updated_at = @ts WHERE id = @id AND status = \'pending\'',
+    `UPDATE occurrences
+        SET status = @status, note = COALESCE(@note, note), updated_at = @ts
+      WHERE id = @id AND status = 'pending'`,
   );
 
-  const remove = db.prepare('DELETE FROM occurrences WHERE id = ?');
+  // Same guard on delete: a row that settled between the plan being computed
+  // and this statement must not be removed.
+  const remove = db.prepare("DELETE FROM occurrences WHERE id = ? AND status = 'pending'");
 
   const run = db.transaction(() => {
     for (const o of plan.toInsert) insert.run({ ...o, id: newId(), ts });
@@ -316,27 +336,54 @@ export interface UpdateRuleInput {
 }
 
 /**
- * Returns the set of occurrences that the edit invalidated, so the caller can
- * present them before anything is rewritten.
+ * Dry run for a schedule change.
+ *
+ * Reports the three outcomes separately, because conflating them was a bug: the
+ * original returned only rows already present in the ledger, so the dates a
+ * loosened schedule *adds* could never appear in the preview.
+ *
+ * - `added`       dates the new schedule introduces, not yet in the ledger
+ * - `withdrawn`   existing unlogged occurrences the new schedule drops
+ * - `neutralised` existing unlogged occurrences moved to `skipped`
  */
 export function previewRuleEdit(
   db: DB,
   ruleId: string,
   input: UpdateRuleInput,
-): { invalidated: Occurrence[] } {
+): {
+  added: string[];
+  withdrawn: Occurrence[];
+  neutralised: Occurrence[];
+  changed: boolean;
+} {
+  const empty = { added: [], withdrawn: [], neutralised: [], changed: false };
   const settings = readSettings(db);
-  const rule = db.prepare('SELECT * FROM rules WHERE id = ?').get(ruleId) as RuleRow | undefined;
-  if (!rule) return { invalidated: [] };
+  const row = db.prepare('SELECT * FROM rules WHERE id = ?').get(ruleId) as RuleRow | undefined;
+  if (!row) return empty;
 
-  const current = toRule(rule);
+  const current = toRule(row);
   const nextRrule = input.rrule ?? current.rrule;
   const nextDtstart = input.dtstartDate ?? current.dtstartDate;
+  if (nextRrule === current.rrule && nextDtstart === current.dtstartDate) return empty;
 
-  if (nextRrule === current.rrule && nextDtstart === current.dtstartDate) {
-    return { invalidated: [] };
-  }
+  // One clock for the whole probe: reading it twice could straddle midnight and
+  // produce a window the plan cannot reconcile against.
+  const now = new Date();
+  const today = todayInTimeZone(settings.timezone, now);
+  const from = addDays(
+    addDays(today, -safeWindowDays(settings.lookbackDays, DEFAULT_SETTINGS.lookbackDays)),
+    -1,
+  );
+  const to = addDays(
+    addDays(today, safeWindowDays(settings.lookaheadDays, DEFAULT_SETTINGS.lookaheadDays)),
+    1,
+  );
 
   const versions = readVersions(db);
+  const nextVersion =
+    Math.max(0, ...versions.filter((v) => v.ruleId === ruleId).map((v) => v.version)) + 1;
+
+  const existing = readOccurrences(db, from, to);
   const probe = generatePlan({
     settings,
     rules: [{ ...current, rrule: nextRrule, dtstartDate: nextDtstart }],
@@ -345,36 +392,44 @@ export function previewRuleEdit(
       {
         id: 'preview',
         ruleId,
-        version: Math.max(0, ...versions.filter((v) => v.ruleId === ruleId).map((v) => v.version)) + 1,
+        version: nextVersion,
         rrule: nextRrule,
         dtstartDate: nextDtstart,
         effectiveFrom: input.effectiveFrom,
-        createdAt: nowIso(),
+        createdAt: now.toISOString(),
       },
     ],
     skipPeriods: readSkipPeriods(db),
     exceptions: readExceptions(db),
-    occurrences: readOccurrences(
-      db,
-      addDays(addDays(todayInTimeZone(settings.timezone, new Date()), -settings.lookbackDays), -1),
-      addDays(addDays(todayInTimeZone(settings.timezone, new Date()), settings.lookaheadDays), 1),
-    ),
-    now: new Date(),
+    occurrences: existing,
+    now,
   });
 
-  const touched = new Set([
-    ...probe.toInsert.map((o) => `${o.ruleId}|${o.scheduledDate}`),
-    ...probe.toUpdate.map((u) => u.id),
-    ...probe.toDelete.map((d) => d.id),
-  ]);
+  const added = probe.toInsert
+    .filter((o) => o.ruleId === ruleId)
+    .map((o) => o.scheduledDate)
+    .sort();
 
-  const invalidated = readOccurrences(
-    db,
-    addDays(addDays(todayInTimeZone(settings.timezone, new Date()), -settings.lookbackDays), -1),
-    addDays(addDays(todayInTimeZone(settings.timezone, new Date()), settings.lookaheadDays), 1),
-  ).filter((o) => o.ruleId === ruleId && o.status === 'pending' && touched.has(o.id));
+  const byId = new Map(existing.map((o) => [o.id, o]));
 
-  return { invalidated };
+  const withdrawn: Occurrence[] = [];
+  for (const d of probe.toDelete) {
+    const o = byId.get(d.id);
+    if (o && o.status === 'pending') withdrawn.push(o);
+  }
+
+  const neutralised: Occurrence[] = [];
+  for (const u of probe.toUpdate) {
+    const o = byId.get(u.id);
+    if (o && o.status === 'pending') neutralised.push(o);
+  }
+
+  return {
+    added,
+    withdrawn,
+    neutralised,
+    changed: added.length > 0 || withdrawn.length > 0 || neutralised.length > 0,
+  };
 }
 
 export function updateRule(db: DB, ruleId: string, input: UpdateRuleInput): Rule | null {
@@ -423,13 +478,6 @@ export function updateRule(db: DB, ruleId: string, input: UpdateRuleInput): Rule
   return toRule(db.prepare('SELECT * FROM rules WHERE id = ?').get(ruleId) as RuleRow);
 }
 
-/** Soft delete. History stays queryable, which is the whole point. */
-export function archiveRule(db: DB, ruleId: string): boolean {
-  return db
-    .prepare('UPDATE rules SET active = 0, updated_at = ? WHERE id = ?')
-    .run(nowIso(), ruleId).changes > 0;
-}
-
 export function setOccurrenceStatus(
   db: DB,
   occurrenceId: string,
@@ -466,9 +514,20 @@ export function deleteSkipPeriod(db: DB, id: string): boolean {
   return db.prepare('DELETE FROM skip_periods WHERE id = ?').run(id).changes > 0;
 }
 
-export function updateSettings(db: DB, patch: Partial<Settings>): Settings {
-  const current = readSettings(db);
+/**
+ * SQLite has no numeric enforcement unless asked: the schema declares the
+ * tables `STRICT` and `CHECK`s the window bounds, and this clamps again so a
+ * row written by any other path degrades instead of throwing.
+ */
+export function sanitiseSettings(current: Settings, patch: Partial<Settings>): Settings {
   const next: Settings = { ...current, ...patch };
+  next.lookbackDays = safeWindowDays(next.lookbackDays, DEFAULT_SETTINGS.lookbackDays);
+  next.lookaheadDays = safeWindowDays(next.lookaheadDays, DEFAULT_SETTINGS.lookaheadDays);
+  return next;
+}
+
+export function updateSettings(db: DB, patch: Partial<Settings>): Settings {
+  const next = sanitiseSettings(readSettings(db), patch);
   db.prepare(
     'UPDATE settings SET timezone = ?, day_rollover = ?, lookback_days = ?, lookahead_days = ?, email = ? WHERE id = 1',
   ).run(
@@ -479,6 +538,81 @@ export function updateSettings(db: DB, patch: Partial<Settings>): Settings {
     next.email ?? null,
   );
   return readSettings(db);
+}
+
+export function readOccurrence(db: DB, occurrenceId: string): Occurrence | null {
+  const row = db.prepare('SELECT * FROM occurrences WHERE id = ?').get(occurrenceId) as
+    | OccurrenceRow
+    | undefined;
+  return row ? toOccurrence(row) : null;
+}
+
+/**
+ * Has this occurrence's day already closed?
+ *
+ * The occurrence for date D stays open until D+1 at the rollover time in the
+ * user's own timezone — see the day-boundary ADR.
+ */
+export function isOccurrenceElapsed(
+  occ: Pick<Occurrence, 'scheduledDate'>,
+  settings: Settings,
+  now: Date = new Date(),
+): boolean {
+  const closesAt = zonedTimeToUtc(
+    addDays(occ.scheduledDate, 1),
+    settings.dayRollover,
+    settings.timezone,
+  );
+  return now.getTime() >= closesAt.getTime();
+}
+
+/**
+ * The only way out of a terminal state, and only while the day is still open.
+ *
+ * Once the day has closed, leaving the row `pending` is meaningless: the next
+ * materialisation sweep would put it straight back to `missed`. Callers must use
+ * `excuseOccurrence` for a day that has already passed.
+ */
+export function resetOccurrence(db: DB, occurrenceId: string): Occurrence | null {
+  const result = db
+    .prepare(
+      "UPDATE occurrences SET status = 'pending', completed_at = NULL, updated_at = ? WHERE id = ?",
+    )
+    .run(nowIso(), occurrenceId);
+  if (result.changes === 0) return null;
+  return readOccurrence(db, occurrenceId);
+}
+
+/**
+ * Excuse an occurrence: `skipped`, so it leaves the adherence denominator,
+ * whether or not its day has closed. A deliberate user action, which is why it
+ * may write a terminal state.
+ */
+export function excuseOccurrence(db: DB, occurrenceId: string): Occurrence | null {
+  if (!readOccurrence(db, occurrenceId)) return null;
+  db.prepare("UPDATE occurrences SET status = 'skipped', updated_at = ? WHERE id = ?").run(
+    nowIso(),
+    occurrenceId,
+  );
+  return readOccurrence(db, occurrenceId);
+}
+
+/**
+ * Soft delete. History stays queryable, which is the whole point.
+ *
+ * An archived rule stops generating, so the generator will never reconcile its
+ * rows: future pending occurrences would linger forever and keep appearing in
+ * the day view. Withdraw them here, in the same transaction. Past rows are left
+ * alone — they are real history and have already settled.
+ */
+export function archiveRule(db: DB, ruleId: string, today: string): boolean {
+  db.transaction(() => {
+    db.prepare('UPDATE rules SET active = 0, updated_at = ? WHERE id = ?').run(nowIso(), ruleId);
+    db.prepare(
+      "DELETE FROM occurrences WHERE rule_id = ? AND status = 'pending' AND scheduled_date > ?",
+    ).run(ruleId, today);
+  })();
+  return true;
 }
 
 // ---------------------------------------------------------------------------

@@ -155,14 +155,28 @@ export interface TrendPoint {
   counts: OccurrenceCounts;
 }
 
-/** Adherence bucketed by month, for a sparkline across months. */
+/**
+ * Adherence bucketed by month, for a sparkline across months.
+ *
+ * Single pass: occurrences are grouped by their `YYYY-MM` prefix and each
+ * bucket is then read off the group. Filtering the full list once per bucket
+ * was O(months x occurrences), which is what made an unbounded date range a
+ * denial of service on the event loop.
+ */
 export function monthlyTrend(
   occurrences: Occurrence[],
   range: { from: LocalDate; to: LocalDate },
 ): TrendPoint[] {
+  const grouped = new Map<string, Occurrence[]>();
+  for (const occ of occurrences) {
+    const key = occ.scheduledDate.slice(0, 7);
+    const bucket = grouped.get(key);
+    if (bucket) bucket.push(occ);
+    else grouped.set(key, [occ]);
+  }
+
   return eachMonth(range.from, range.to).map((bucket) => {
-    const slice = occurrences.filter((o) => o.scheduledDate.startsWith(bucket.slice(0, 7)));
-    const counts = countOccurrences(slice);
+    const counts = countOccurrences(grouped.get(bucket.slice(0, 7)) ?? []);
     const denominator = counts.done + counts.missed;
     return { bucket, adherence: denominator === 0 ? null : counts.done / denominator, counts };
   });

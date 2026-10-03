@@ -15,21 +15,37 @@ const WEB_DIST = process.env.WEB_DIST ?? join(root, 'packages', 'web', 'dist');
 mkdirSync(dirname(DB_FILE), { recursive: true });
 
 const db = openDatabase(DB_FILE);
-const app = buildApp(db);
+const app = buildApp(db, {
+  // Same-origin only unless explicitly opened up. Reflecting any origin would
+  // let any site the owner visits read and rewrite their ledger.
+  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
+  logger: process.env.LOG !== 'off',
+});
 
-if (existsSync(WEB_DIST)) {
+if (existsSync(join(WEB_DIST, 'index.html'))) {
   // Serve the built PWA when it is available, so one process is the whole app.
+  // Gated on index.html rather than the directory: without it, `sendFile`
+  // re-enters the not-found handler and turns every request into a 500.
   const fastifyStatic = (await import('@fastify/static')).default;
   await app.register(fastifyStatic, { root: WEB_DIST });
-  app.setNotFoundHandler((req, reply) => {
-    if (req.url.startsWith('/api/')) {
-      reply.code(404).send({ error: 'Not found' });
-      return;
-    }
-    // Client-side routing: hand back the SPA shell.
-    reply.sendFile('index.html');
-  });
 }
+app.setNotFoundHandler((req, reply) => {
+  if (req.url.startsWith('/api/')) {
+    reply.code(404).send({ error: 'Not found' });
+    return;
+  }
+  // Client-side routing: hand back the SPA shell, but only to requests that
+  // actually want a document.
+  if (!req.headers.accept?.includes('text/html')) {
+    reply.code(404).send({ error: 'Not found' });
+    return;
+  }
+  if (reply.sent) return;
+  reply.sendFile('index.html');
+});
 
 await app.listen({ port: PORT, host: HOST });
 

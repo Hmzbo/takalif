@@ -13,5 +13,8 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "dev": "pnpm --filter @takalif/server dev"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7"
   }
 }
