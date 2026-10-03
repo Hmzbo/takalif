@@ -29,7 +29,8 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11
+          # Version comes from package.json `packageManager` (pnpm@11.10.0).
+          # Specifying it here too makes the action refuse to run.
           run_install: false
 
       - name: Get pnpm store directory
