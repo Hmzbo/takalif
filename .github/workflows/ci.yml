@@ -1,0 +1,89 @@
+name: CI
+
+# Gates every pull request. This exists because PR #4 shipped a server whose
+# build failed in a way `pnpm typecheck` could not see: `tsc -p
+# tsconfig.build.json` exited 2 while `tsc --noEmit` passed. The build is part
+# of the gate from here on.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Test, typecheck, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: store
+        shell: bash
+        run: echo "dir=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      # The build was the silent blocker: it must be part of the gate, not
+      # discovered at packaging time. `better-sqlite3` is native, so this also
+      # proves the install and allowBuilds config works on a clean checkout.
+      - name: Build
+        run: pnpm build
+
+      - name: Boot the built server and probe it
+        shell: bash
+        run: |
+          set -e
+          mkdir -p /tmp/takalif-ci
+          DB_FILE=/tmp/takalif-ci/ci.sqlite PORT=8799 HOST=127.0.0.1 node packages/server/dist/index.js &
+          SRV=$!
+          trap 'kill $SRV 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8799/api/health >/dev/null 2>&1; then break; fi
+            sleep 0.5
+          done
+
+          echo "-- health --"
+          curl -fsS http://127.0.0.1:8799/api/health
+
+          echo ""
+          echo "-- create a rule, expect 201 --"
+          CODE=$(curl -s -o /tmp/takalif-ci/rule.json -w '%{http_code}' \
+            -X POST http://127.0.0.1:8799/api/rules \
+            -H 'content-type: application/json' \
+            -d '{"title":"CI Workout","rrule":"FREQ=DAILY"}')
+          test "$CODE" = "201" || { cat /tmp/takalif-ci/rule.json; exit 1; }
+          echo "created: $(cat /tmp/takalif-ci/rule.json)"
+
+          echo "-- day view, expect one pending item --"
+          curl -fsS http://127.0.0.1:8799/api/day
