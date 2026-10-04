@@ -4,13 +4,15 @@ import { api } from './api';
 import { useOnline, useResource, useTheme } from './data';
 import { RulesView } from './components/RulesView';
 import { SettingsView } from './components/SettingsView';
+import { StatsView, type ReviewRange } from './components/StatsView';
 import { TodayView } from './components/TodayView';
 
-type Tab = 'today' | 'rules' | 'settings';
+type Tab = 'today' | 'rules' | 'stats' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'today', label: 'Today', icon: '✓' },
   { id: 'rules', label: 'Rules', icon: '◷' },
+  { id: 'stats', label: 'Stats', icon: '▦' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
@@ -25,6 +27,16 @@ export function App() {
   const online = useOnline();
   const { theme, setTheme } = useTheme();
   const settings = useResource<Settings>('settings', () => api.settings());
+
+  // Set by the recovery prompt's "Review" action: jump to Stats showing that range.
+  const [reviewRange, setReviewRange] = useState<ReviewRange | null>(null);
+  const [reviewNonce, setReviewNonce] = useState(0);
+
+  function reviewRangeAction(from: string, to: string) {
+    setReviewRange({ from, to });
+    setReviewNonce((n) => n + 1);
+    setTab('stats');
+  }
 
   return (
     <>
@@ -60,8 +72,11 @@ export function App() {
       </header>
 
       <main className="app">
-        {tab === 'today' && <TodayView settings={settings.data} />}
+        {tab === 'today' && (
+          <TodayView settings={settings.data} onReviewRange={reviewRangeAction} />
+        )}
         {tab === 'rules' && <RulesView onChanged={() => settings.refresh()} />}
+        {tab === 'stats' && <StatsView reviewRange={reviewRange} reviewNonce={reviewNonce} />}
         {tab === 'settings' && <SettingsView onChanged={() => settings.refresh()} />}
       </main>
 

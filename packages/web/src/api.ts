@@ -146,6 +146,8 @@ export const api = {
   reset: (id: string) => request<Occurrence>(`/api/occurrences/${id}/reset`, withBody('POST', {})),
   excuse: (id: string) =>
     request<Occurrence>(`/api/occurrences/${id}/excuse`, withBody('POST', {})),
+  bulkExcuse: (input: { from: string; to: string; ruleIds?: string[] }) =>
+    request<{ excused: number }>('/api/occurrences/bulk-excuse', withBody('POST', input)),
 
   skipPeriods: () => request<SkipPeriod[]>('/api/skip-periods'),
   createSkipPeriod: (input: { startDate: string; endDate: string; reason?: string | null }) =>

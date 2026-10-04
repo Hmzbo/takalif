@@ -12,7 +12,96 @@ const STATUS_LABEL: Record<DayItem['status'], string> = {
   skipped: 'Skipped',
 };
 
-export function TodayView({ settings }: { settings: Settings | null }) {
+const DISMISSED_KEY = 'takalif-recovery-dismissed';
+
+/**
+ * Offered after a long absence, when the sweep recorded a wall of failures.
+ *
+ * "We were away" excuses the whole range at once via the bulk endpoint;
+ * without it the only path was one tap per occurrence. Dismissal is stored
+ * per range so the same prompt does not nag twice.
+ */
+function RecoveryBanner({
+  from,
+  to,
+  count,
+  ruleIds,
+  onDone,
+  onReviewRange,
+}: {
+  from: string;
+  to: string;
+  count: number;
+  ruleIds: string[];
+  onDone: () => void;
+  onReviewRange: (from: string, to: string) => void;
+}) {
+  const key = `${from}:${to}`;
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(DISMISSED_KEY) === key;
+    } catch {
+      return false;
+    }
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (dismissed) return null;
+
+  const dismiss = () => {
+    try {
+      localStorage.setItem(DISMISSED_KEY, key);
+    } catch {
+      // Private browsing: dismissal lasts the session only. Acceptable.
+    }
+    setDismissed(true);
+  };
+
+  async function excuseAll() {
+    setBusy(true);
+    setError(null);
+    const err = await runMutation(() => api.bulkExcuse({ from, to, ruleIds }));
+    setBusy(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    dismiss();
+    onDone();
+  }
+
+  return (
+    <Banner kind="warn">
+      <div>
+        <strong>
+          {count} unlogged occurrence{count === 1 ? '' : 's'}
+        </strong>{' '}
+        from {formatDayLabel(from)} to {formatDayLabel(to)}, recorded as missed.
+      </div>
+      {error && <div style={{ marginBlockStart: '0.4rem' }}>{error}</div>}
+      <div style={{ display: 'flex', gap: '0.4rem', marginBlockStart: '0.5rem', flexWrap: 'wrap' }}>
+        <button type="button" className="btn small" disabled={busy} onClick={excuseAll}>
+          {busy ? 'Excusing…' : 'We were away — excuse all'}
+        </button>
+        <button type="button" className="btn small ghost" onClick={() => onReviewRange(from, to)}>
+          Review
+        </button>
+        <button type="button" className="btn small ghost" onClick={dismiss}>
+          Dismiss
+        </button>
+      </div>
+    </Banner>
+  );
+}
+
+export function TodayView({
+  settings,
+  onReviewRange,
+}: {
+  settings: Settings | null;
+  onReviewRange: (from: string, to: string) => void;
+}) {
   const [date, setDate] = useState<string | null>(null);
   const day: Resource<Awaited<ReturnType<typeof api.day>>> = useResource(
     `day:${date ?? 'today'}`,
@@ -76,6 +165,16 @@ export function TodayView({ settings }: { settings: Settings | null }) {
 
       {day.error && <ErrorBanner error={day.error} onRetry={day.refresh} />}
       {actionError && <Banner kind="error">{actionError}</Banner>}
+      {day.data?.recoveryPrompt && (
+        <RecoveryBanner
+          from={day.data.recoveryPrompt.from}
+          to={day.data.recoveryPrompt.to}
+          count={day.data.recoveryPrompt.count}
+          ruleIds={day.data.recoveryPrompt.ruleIds}
+          onDone={day.refresh}
+          onReviewRange={onReviewRange}
+        />
+      )}
       {day.data?.failedRules?.length ? (
         <Banner kind="warn">
           {day.data.failedRules.length === 1 ? 'A rule' : `${day.data.failedRules.length} rules`}{' '}
