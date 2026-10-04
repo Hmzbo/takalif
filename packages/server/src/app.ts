@@ -465,7 +465,9 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     if (!existing) return notFound(reply, 'Occurrence not found');
 
     const settings = readSettings(db);
-    if (isOccurrenceElapsed(existing, settings)) {
+    // The injected clock, not wall time: tests freeze `now`, and "has this day
+    // closed" must be answered in the same frame of reference as everything else.
+    if (isOccurrenceElapsed(existing, settings, clock())) {
       return conflict(
         reply,
         "This day has already closed, so it cannot be reopened. Use /excuse to remove it from your adherence figures.",
