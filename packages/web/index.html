@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- `dir` stays `ltr` until translations land. All CSS uses logical
+     properties (margin-inline-start, inset-inline-end, …), so flipping this
+     to `rtl` later needs no stylesheet changes. See ADR D17. -->
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e7c5b" />
+    <meta
+      name="description"
+      content="Takalif — recurring commitments, and how faithfully you kept them."
+    />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <title>Takalif</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Apply the stored theme before first paint to avoid a flash.
+      // Mirrors useTheme in src/data.ts.
+      try {
+        var t = localStorage.getItem('takalif-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

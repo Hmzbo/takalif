@@ -1,0 +1,544 @@
+/*
+ * Takalif styles. Plain CSS, no framework.
+ *
+ * Two rules the whole file follows:
+ * 1. Logical properties only (margin-inline-*, padding-inline-*, inset-*,
+ *    border-start-*, text-align: start/end). Nothing physical (no margin-left,
+ *    no text-align: left). Flipping `dir` to `rtl` must just work. See D17.
+ * 2. All colours through custom properties, so dark mode is a variable swap.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --surface-2: #eef1ee;
+  --text: #17211c;
+  --text-2: #5b6b62;
+  --border: #dde3de;
+  --accent: #0e7c5b;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcefe7;
+  --warn: #a15c00;
+  --warn-soft: #f9ecd4;
+  --danger: #b3261e;
+  --danger-soft: #f9dcd8;
+  --ok: #0e7c5b;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgb(20 30 25 / 0.06), 0 4px 16px rgb(20 30 25 / 0.06);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b0f0e;
+  --surface: #131918;
+  --surface-2: #1b2321;
+  --text: #e8efeb;
+  --text-2: #9db0a6;
+  --border: #26302c;
+  --accent: #3cb98a;
+  --accent-ink: #06281c;
+  --accent-soft: #14352a;
+  --warn: #e8a33d;
+  --warn-soft: #3a2c12;
+  --danger: #f0908a;
+  --danger-soft: #3d1d1a;
+  --ok: #3cb98a;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 16px rgb(0 0 0 / 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0f0e;
+    --surface: #131918;
+    --surface-2: #1b2321;
+    --text: #e8efeb;
+    --text-2: #9db0a6;
+    --border: #26302c;
+    --accent: #3cb98a;
+    --accent-ink: #06281c;
+    --accent-soft: #14352a;
+    --warn: #e8a33d;
+    --warn-soft: #3a2c12;
+    --danger: #f0908a;
+    --danger-soft: #3d1d1a;
+    --ok: #3cb98a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 16px rgb(0 0 0 / 0.3);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* -- layout ---------------------------------------------------------- */
+
+.app {
+  inline-size: min(44rem, 100%);
+  margin-inline: auto;
+  padding-inline: max(1rem, env(safe-area-inset-inline-start));
+  padding-block-end: 5.5rem;
+}
+
+.app-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-block-end: 1px solid var(--border);
+  padding-block: 0.75rem;
+}
+
+.app-header-inner {
+  inline-size: min(44rem, 100%);
+  margin-inline: auto;
+  padding-inline: max(1rem, env(safe-area-inset-inline-start));
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brand {
+  font-weight: 750;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  margin-inline-end: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand-mark {
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  border-radius: 0.45rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+/* -- tabs ------------------------------------------------------------ */
+
+.tabs {
+  position: fixed;
+  inset-block-end: 0;
+  inset-inline: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  border-block-start: 1px solid var(--border);
+  padding-block-end: env(safe-area-inset-block-end);
+}
+
+.tabs-inner {
+  inline-size: min(44rem, 100%);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  padding-block: 0.7rem 0.6rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.tab[aria-selected="true"] {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.tab-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* -- cards & lists --------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+  margin-block: 0.75rem;
+}
+
+.section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  margin-block: 1.25rem 0.5rem;
+}
+
+.day-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+
+.day-title {
+  text-align: center;
+}
+
+.day-title strong {
+  display: block;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+
+.day-title span {
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-block: 0.8rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.item:last-child {
+  border-block-end: 0;
+  padding-block-end: 0.2rem;
+}
+
+.item-main {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.item-title {
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+.item-title.done {
+  text-decoration: line-through;
+  color: var(--text-2);
+}
+
+.item-meta {
+  color: var(--text-2);
+  font-size: 0.82rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap-inline: 0.5rem;
+  margin-block-start: 0.15rem;
+}
+
+.item-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 650;
+  padding-inline: 0.5rem;
+  padding-block: 0.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.pill.done {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--ok);
+}
+
+.pill.missed {
+  background: var(--danger-soft);
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.pill.skipped {
+  background: var(--warn-soft);
+  border-color: transparent;
+  color: var(--warn);
+}
+
+.pill.hijri {
+  border-style: dashed;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-2);
+  padding-block: 2.5rem 2rem;
+}
+
+/* -- buttons & forms ------------------------------------------------- */
+
+button,
+.btn {
+  font: inherit;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding-inline: 0.8rem;
+  padding-block: 0.45rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+}
+
+.btn.danger {
+  color: var(--danger);
+}
+
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+  padding-inline: 0.4rem;
+}
+
+.btn.small {
+  font-size: 0.8rem;
+  padding-inline: 0.6rem;
+  padding-block: 0.3rem;
+}
+
+.btn.icon {
+  padding-inline: 0.5rem;
+  padding-block: 0.3rem;
+  line-height: 1;
+}
+
+.field {
+  margin-block: 0.7rem;
+}
+
+.field label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 650;
+  margin-block-end: 0.25rem;
+}
+
+.field .hint {
+  font-size: 0.78rem;
+  color: var(--text-2);
+  margin-block-start: 0.2rem;
+}
+
+input[type="text"],
+input[type="time"],
+input[type="date"],
+input[type="number"],
+input[type="email"],
+textarea,
+select {
+  font: inherit;
+  inline-size: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding-inline: 0.65rem;
+  padding-block: 0.5rem;
+}
+
+textarea {
+  min-block-size: 3.5rem;
+  resize: vertical;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-block: 0.7rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.checkbox-row input {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  accent-color: var(--accent);
+}
+
+.day-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.day-chip {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  border-radius: 999px;
+  padding-inline: 0.7rem;
+  padding-block: 0.35rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.day-chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+  font-weight: 650;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-block-start: 1rem;
+}
+
+/* -- banners --------------------------------------------------------- */
+
+.banner {
+  border-radius: var(--radius-sm);
+  padding-inline: 0.8rem;
+  padding-block: 0.6rem;
+  font-size: 0.88rem;
+  margin-block: 0.75rem;
+  border: 1px solid transparent;
+}
+
+.banner.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.banner.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+.banner.info {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* -- misc ------------------------------------------------------------ */
+
+.muted {
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82em;
+}
+
+.preview-list {
+  margin-block: 0.4rem;
+  padding-inline-start: 1.2rem;
+  font-size: 0.85rem;
+}
+
+.offline-bar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+  background: var(--warn-soft);
+  color: var(--warn);
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 650;
+  padding-block: 0.35rem;
+}
+
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  min-block-size: 3.5rem;
+  margin-block: 0.75rem;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

@@ -1,0 +1,160 @@
+import { useState } from 'react';
+import { api, type DayItem } from '../api';
+import { runMutation, useResource, type Resource } from '../data';
+import { calendarLabel, formatCalendarDate, formatDayLabel, shiftDate } from '../format';
+import { Banner, ErrorBanner, Skeleton } from '../ui';
+import type { Settings } from '@takalif/core';
+
+const STATUS_LABEL: Record<DayItem['status'], string> = {
+  pending: 'Due',
+  done: 'Done',
+  missed: 'Missed',
+  skipped: 'Skipped',
+};
+
+export function TodayView({ settings }: { settings: Settings | null }) {
+  const [date, setDate] = useState<string | null>(null);
+  const day: Resource<Awaited<ReturnType<typeof api.day>>> = useResource(
+    `day:${date ?? 'today'}`,
+    () => api.day(date ?? undefined),
+  );
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const viewing = date ?? day.data?.today ?? '';
+  const isToday = !day.data || viewing === day.data.today;
+
+  async function act(id: string, fn: () => Promise<unknown>) {
+    setBusyId(id);
+    setActionError(null);
+    const err = await runMutation(fn);
+    setBusyId(null);
+    if (err) {
+      setActionError(err.message);
+      return;
+    }
+    day.refresh();
+  }
+
+  return (
+    <section aria-label="Today">
+      <div className="day-nav">
+        <button
+          type="button"
+          className="btn icon"
+          aria-label="Previous day"
+          onClick={() => setDate((d) => shiftDate(d ?? day.data?.today ?? '', -1))}
+          disabled={!day.data}
+        >
+          ←
+        </button>
+        <div className="day-title">
+          <strong>{viewing ? formatDayLabel(viewing) : '…'}</strong>
+          <span>
+            {day.data && settings
+              ? formatCalendarDate(viewing, day.data.calendarDate, settings.defaultCalendar)
+              : ''}
+            {!isToday && day.data ? ` · today is ${formatDayLabel(day.data.today)}` : ''}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="btn icon"
+          aria-label="Next day"
+          onClick={() => setDate((d) => shiftDate(d ?? day.data?.today ?? '', 1))}
+          disabled={!day.data}
+        >
+          →
+        </button>
+      </div>
+
+      {!isToday && (
+        <button type="button" className="btn small" onClick={() => setDate(null)}>
+          Back to today
+        </button>
+      )}
+
+      {day.error && <ErrorBanner error={day.error} onRetry={day.refresh} />}
+      {actionError && <Banner kind="error">{actionError}</Banner>}
+      {day.data?.failedRules?.length ? (
+        <Banner kind="warn">
+          {day.data.failedRules.length === 1 ? 'A rule' : `${day.data.failedRules.length} rules`}{' '}
+          could not be expanded, so{' '}
+          {day.data.failedRules.length === 1 ? 'it is' : 'they are'} generating nothing. Check the
+          rules list.
+        </Banner>
+      ) : null}
+      {day.loading && <Skeleton />}
+
+      {day.data && day.data.items.length === 0 && (
+        <div className="empty">
+          <p>Nothing due{isToday ? ' today' : ' on this day'}.</p>
+          <p className="muted">Enjoy it, or add a rule.</p>
+        </div>
+      )}
+
+      {day.data?.items.map((item) => (
+        <article className="card" key={item.id} style={{ marginBlock: '0.5rem' }}>
+          <div className="item" style={{ borderBlockEnd: 0, paddingBlock: 0 }}>
+            <div className="item-main">
+              <div className={`item-title${item.status === 'done' ? ' done' : ''}`}>
+                {item.ruleTitle}
+              </div>
+              <div className="item-meta">
+                <span className={`pill ${item.status}`}>{STATUS_LABEL[item.status]}</span>
+                {item.ruleCalendar !== 'gregorian' && (
+                  <span className="pill hijri">{calendarLabel(item.ruleCalendar)}</span>
+                )}
+                {item.category && <span>{item.category}</span>}
+                {item.dueTime && <span>due {item.dueTime}</span>}
+              </div>
+              {item.note && <div className="muted">{item.note}</div>}
+            </div>
+            <div className="item-actions">
+              {item.status === 'pending' && (
+                <>
+                  <button
+                    type="button"
+                    className="btn small primary"
+                    disabled={busyId === item.id}
+                    onClick={() => act(item.id, () => api.markDone(item.id))}
+                  >
+                    Done
+                  </button>
+                  <button
+                    type="button"
+                    className="btn small"
+                    disabled={busyId === item.id}
+                    onClick={() => act(item.id, () => api.markMissed(item.id))}
+                  >
+                    Miss
+                  </button>
+                </>
+              )}
+              {item.status === 'done' && (
+                <button
+                  type="button"
+                  className="btn small ghost"
+                  disabled={busyId === item.id}
+                  onClick={() => act(item.id, () => api.reset(item.id))}
+                >
+                  Undo
+                </button>
+              )}
+              {item.status === 'missed' && (
+                <button
+                  type="button"
+                  className="btn small ghost"
+                  disabled={busyId === item.id}
+                  onClick={() => act(item.id, () => api.excuse(item.id))}
+                >
+                  Excuse
+                </button>
+              )}
+            </div>
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
