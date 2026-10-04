@@ -609,11 +609,54 @@ export function resetOccurrence(db: DB, occurrenceId: string): Occurrence | null
  */
 export function excuseOccurrence(db: DB, occurrenceId: string): Occurrence | null {
   if (!readOccurrence(db, occurrenceId)) return null;
-  db.prepare("UPDATE occurrences SET status = 'skipped', updated_at = ? WHERE id = ?").run(
-    nowIso(),
-    occurrenceId,
-  );
+  // A `done` occurrence is a success on record; excusing it would destroy
+  // history, so only pending/missed (and idempotently skipped) may move.
+  // The route pre-checks for `done` and answers 409; this guard covers races.
+  db.prepare(
+    "UPDATE occurrences SET status = 'skipped', updated_at = ? WHERE id = ? AND status IN ('pending', 'missed', 'skipped')",
+  ).run(nowIso(), occurrenceId);
   return readOccurrence(db, occurrenceId);
+}
+
+export interface BulkExcuseResult {
+  /** Rows actually moved to `skipped`. */
+  excused: number;
+}
+
+/**
+ * Excuse every unlogged occurrence in a date range, optionally limited to a
+ * set of rules. This is what the recovery prompt's "we were away" action
+ * calls: after a long absence the sweep has already marked a wall of rows
+ * `missed`, and doing that one by one is busywork.
+ *
+ * `done` rows are never touched — same guard as the single route, enforced in
+ * SQL so a concurrent check-off between read and write cannot be undone.
+ */
+export function bulkExcuseOccurrences(
+  db: DB,
+  from: string,
+  to: string,
+  ruleIds?: string[],
+): BulkExcuseResult {
+  const ts = nowIso();
+  if (!ruleIds || ruleIds.length === 0) {
+    const result = db
+      .prepare(
+        `UPDATE occurrences SET status = 'skipped', updated_at = ?
+         WHERE scheduled_date BETWEEN ? AND ? AND status IN ('pending', 'missed')`,
+      )
+      .run(ts, from, to);
+    return { excused: Number(result.changes) };
+  }
+  const placeholders = ruleIds.map(() => '?').join(',');
+  const result = db
+    .prepare(
+      `UPDATE occurrences SET status = 'skipped', updated_at = ?
+       WHERE scheduled_date BETWEEN ? AND ? AND status IN ('pending', 'missed')
+         AND rule_id IN (${placeholders})`,
+    )
+    .run(ts, from, to, ...ruleIds);
+  return { excused: Number(result.changes) };
 }
 
 /**

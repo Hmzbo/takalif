@@ -19,6 +19,7 @@ import type { DB } from './db.js';
 import {
   archiveRule,
   buildPeriodReport,
+  bulkExcuseOccurrences,
   createRule,
   createSkipPeriod,
   deleteSkipPeriod,
@@ -479,11 +480,51 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
   /** Excuse an occurrence: `skipped`, leaving the adherence denominator. */
   app.post('/api/occurrences/:id/excuse', async (req, reply) => {
     const { id } = req.params as { id: string };
-    if (!readOccurrence(db, id)) return notFound(reply, 'Occurrence not found');
+    const existing = readOccurrence(db, id);
+    if (!existing) return notFound(reply, 'Occurrence not found');
+    // A success on record must survive: excusing `done` would rewrite history.
+    if (existing.status === 'done') {
+      return conflict(reply, 'Occurrence is already done and cannot be excused');
+    }
     const occ = excuseOccurrence(db, id);
     if (!occ) return notFound(reply, 'Occurrence not found');
     sync();
     return occ;
+  });
+
+  /**
+   * Excuse every unlogged occurrence in a date range. This is the recovery
+   * prompt's "we were away" action: after a long absence the sweep marks a
+   * wall of rows `missed`, and clearing that one by one is busywork.
+   *
+   * `done` rows are never touched; the route reports how many rows moved.
+   */
+  app.post('/api/occurrences/bulk-excuse', async (req, reply) => {
+    const input = body(req.body);
+    const from = single(input.from) ?? '';
+    const to = single(input.to) ?? '';
+    if (!isValidDate(from) || !isValidDate(to)) {
+      return badRequest(reply, 'from and to must be YYYY-MM-DD');
+    }
+    if (to < from) return badRequest(reply, 'to must not precede from');
+    if (daysBetween(from, to) > MAX_REPORT_SPAN_DAYS) {
+      return badRequest(reply, `range must not exceed ${MAX_REPORT_SPAN_DAYS} days`);
+    }
+
+    let ruleIds: string[] | undefined;
+    if (input.ruleIds !== undefined) {
+      if (!Array.isArray(input.ruleIds) || input.ruleIds.length > 200) {
+        return badRequest(reply, 'ruleIds must be an array of at most 200 rule ids');
+      }
+      if (input.ruleIds.some((id) => typeof id !== 'string' || id.length === 0)) {
+        return badRequest(reply, 'ruleIds must be an array of rule id strings');
+      }
+      ruleIds = input.ruleIds as string[];
+    }
+
+    const result = bulkExcuseOccurrences(db, from, to, ruleIds);
+    sync();
+    return result;
   });
 
   // -- skip periods ---------------------------------------------------------
@@ -576,11 +617,13 @@ function resolveRange(
   q: Record<string, unknown>,
   today: string,
 ): { from: string; to: string } | { error: string } {
+  // Trailing windows: adherence looks back at what happened, never forward at
+  // what is still pending (which would always report null).
   const presets: Record<string, [number, number]> = {
-    week: [0, 6],
-    month: [0, 29],
-    quarter: [0, 89],
-    year: [0, 364],
+    week: [6, 0],
+    month: [29, 0],
+    quarter: [89, 0],
+    year: [364, 0],
   };
 
   const asSingle = (value: unknown): string | undefined =>
