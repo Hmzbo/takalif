@@ -190,6 +190,7 @@ export function generatePlan(input: GeneratorInput): GeneratorPlan {
           dtstart: version.dtstartDate,
           from: lo,
           to: hi,
+          calendar: rule.calendar,
         });
       } catch (error) {
         if (error instanceof InvalidRRuleError) {

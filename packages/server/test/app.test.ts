@@ -5,13 +5,14 @@ import { describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { openDatabase, type DB } from '../src/db.js';
+import { toHijri } from '@takalif/core';
 
 /**
  * Integration tests against a real SQLite file.
  *
  * `packages/core` proves the *plan* is right; nothing proved that the SQL which
  * persists it honours the same invariants. That gap is where every review
- * finding lived — the settings wedge, the frozen-terminal breach, the silent
+ * finding lived � the settings wedge, the frozen-terminal breach, the silent
  * no-op reset, and every error path answering 200.
  *
  * Each case builds a fresh app and database: no ordering dependency, no shared
@@ -38,10 +39,10 @@ interface Harness {
   cleanup: () => void;
 }
 
-function harness(): Harness {
+function harness(now?: () => Date): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'takalif-test-'));
   const db = openDatabase(join(dir, 'test.sqlite'));
-  const app = buildApp(db, { logger: false });
+  const app = buildApp(db, { logger: false, now });
 
   const wrap = (r: { statusCode: number; body: string }): Reply => ({
     statusCode: r.statusCode,
@@ -91,7 +92,9 @@ function harness(): Harness {
 
 describe('materialisation', () => {
   it('materialises a rule and stays idempotent across repeated syncs', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       await h.makeRule();
       const today = await h.today();
@@ -109,7 +112,9 @@ describe('materialisation', () => {
   });
 
   it('does not fabricate history before a rule was created', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       // Widen the window so past dates are materialised at all.
       await h.patch('/api/settings', { lookbackDays: 3660 });
@@ -122,7 +127,9 @@ describe('materialisation', () => {
   });
 
   it('surfaces rules that cannot expand instead of silently dropping them', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       // A corrupt rule written directly, bypassing API validation. The generator
       // only looks at rules that have a version row, so both are needed.
@@ -150,7 +157,9 @@ describe('materialisation', () => {
 
 describe('terminal states are frozen', () => {
   it('refuses to overwrite a completed occurrence', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       await h.makeRule();
       const occ = await h.occurrenceOn(await h.today());
@@ -168,7 +177,9 @@ describe('terminal states are frozen', () => {
   });
 
   it('preserves a user note when the day closes', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       // Widen the window so past dates are materialised at all.
       await h.patch('/api/settings', { lookbackDays: 3660 });
@@ -189,7 +200,9 @@ describe('terminal states are frozen', () => {
 
 describe('occurrence lifecycle', () => {
   it('marks missed and conflicts on a second attempt', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       await h.makeRule();
       const occ = await h.occurrenceOn(await h.today());
@@ -201,7 +214,9 @@ describe('occurrence lifecycle', () => {
   });
 
   it('404s for an occurrence that does not exist', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       const res = await h.post('/api/occurrences/00000000-0000-0000-0000-000000000000/done');
       expect(res.statusCode).toBe(404);
@@ -211,7 +226,9 @@ describe('occurrence lifecycle', () => {
   });
 
   it('rejects a non-ISO completion timestamp', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       await h.makeRule();
       const occ = await h.occurrenceOn(await h.today());
@@ -222,7 +239,9 @@ describe('occurrence lifecycle', () => {
   });
 
   it('resets an open day, and refuses once the day has closed', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       // Widen the window so a settled past date exists to test against.
       await h.patch('/api/settings', { lookbackDays: 3660 });
@@ -248,7 +267,9 @@ describe('occurrence lifecycle', () => {
   });
 
   it('excuses an occurrence so it leaves the adherence denominator', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       // Widen the window so past dates are materialised at all.
       await h.patch('/api/settings', { lookbackDays: 3660 });
@@ -269,7 +290,9 @@ describe('occurrence lifecycle', () => {
 
 describe('settings cannot brick the API', () => {
   it('rejects a non-numeric lookback and stays usable', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       expect((await h.patch('/api/settings', { lookbackDays: 'abc' })).statusCode).toBe(400);
       expect((await h.get('/api/day')).statusCode).toBe(200);
@@ -279,7 +302,9 @@ describe('settings cannot brick the API', () => {
   });
 
   it('rejects a negative or absurdly large lookback', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       expect((await h.patch('/api/settings', { lookbackDays: -1 })).statusCode).toBe(400);
       expect((await h.patch('/api/settings', { lookbackDays: 99999999 })).statusCode).toBe(400);
@@ -290,7 +315,9 @@ describe('settings cannot brick the API', () => {
   });
 
   it('rejects an invalid timezone and rollover', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       expect((await h.patch('/api/settings', { timezone: 'Mars/Olympus' })).statusCode).toBe(400);
       expect((await h.patch('/api/settings', { dayRollover: '25:00' })).statusCode).toBe(400);
@@ -300,7 +327,9 @@ describe('settings cannot brick the API', () => {
   });
 
   it('accepts a valid change', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       const res = await h.patch('/api/settings', { lookbackDays: 7, timezone: 'Europe/Warsaw' });
       expect(res.statusCode).toBe(200);
@@ -312,7 +341,9 @@ describe('settings cannot brick the API', () => {
   });
 
   it('survives a corrupt value already in the database', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       // The CHECK constraint blocks this, which is itself the point.
       expect(() =>
@@ -327,7 +358,9 @@ describe('settings cannot brick the API', () => {
 
 describe('validation returns real status codes', () => {
   it('rejects an invalid RRULE at creation', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       expect((await h.post('/api/rules', { title: 'Bad', rrule: 'FREQ=NONSENSE' })).statusCode).toBe(400);
     } finally {
@@ -336,7 +369,9 @@ describe('validation returns real status codes', () => {
   });
 
   it('rejects an impossible date', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       expect((await h.get('/api/day?date=2026-02-31')).statusCode).toBe(400);
     } finally {
@@ -345,7 +380,9 @@ describe('validation returns real status codes', () => {
   });
 
   it('404s on an unknown rule', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       expect((await h.patch('/api/rules/missing', { title: 'x' })).statusCode).toBe(404);
       expect((await h.get('/api/rules/missing/edit-preview?rrule=FREQ=DAILY')).statusCode).toBe(404);
@@ -355,7 +392,9 @@ describe('validation returns real status codes', () => {
   });
 
   it('validates dtstartDate on update', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       const rule = await h.makeRule();
       expect((await h.patch(`/api/rules/${rule.id}`, { dtstartDate: 'tuesday' })).statusCode).toBe(400);
@@ -366,7 +405,9 @@ describe('validation returns real status codes', () => {
   });
 
   it('requires a strict boolean for trackStreak', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       const res = await h.post('/api/rules', { title: 'x', rrule: 'FREQ=DAILY', trackStreak: 'false' });
       expect(res.statusCode).toBe(400);
@@ -376,7 +417,9 @@ describe('validation returns real status codes', () => {
   });
 
   it('rejects an unbounded statistics range', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       // A real, valid date pair that is simply far too wide to compute.
       const res = await h.get('/api/stats?from=1000-01-01&to=9999-12-31');
@@ -388,7 +431,9 @@ describe('validation returns real status codes', () => {
   });
 
   it('rejects a date that is well-formed but does not exist', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       const res = await h.get('/api/stats?from=1000-01-01&to=9999-13-45');
       expect(res.statusCode).toBe(400);
@@ -400,7 +445,9 @@ describe('validation returns real status codes', () => {
 
 describe('rule versioning and archive', () => {
   it('opens a new version when the schedule changes', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       const rule = await h.makeRule();
       await h.patch(`/api/rules/${rule.id}`, { rrule: 'FREQ=WEEKLY;BYDAY=MO' });
@@ -411,7 +458,9 @@ describe('rule versioning and archive', () => {
   });
 
   it('does not open a version when only the title changes', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       const rule = await h.makeRule();
       await h.patch(`/api/rules/${rule.id}`, { title: 'Renamed' });
@@ -422,7 +471,9 @@ describe('rule versioning and archive', () => {
   });
 
   it('withdraws future pending rows when a rule is archived', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       const rule = await h.makeRule();
       const today = await h.today();
@@ -443,7 +494,9 @@ describe('rule versioning and archive', () => {
 
 describe('EXDATE support', () => {
   it('accepts a rule carrying an exclusion date and honours it', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       await h.makeRule({
         rrule: 'FREQ=MONTHLY;BYMONTHDAY=1;EXDATE:20260901',
@@ -460,11 +513,161 @@ describe('EXDATE support', () => {
 
 describe('schema integrity', () => {
   it('refuses to store text in an integer column', async () => {
-    const h = harness();
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
     try {
       expect(() =>
         h.db.prepare('UPDATE settings SET lookback_days = ? WHERE id = 1').run('abc'),
       ).toThrow();
+    } finally {
+      h.cleanup();
+    }
+  });
+});
+
+describe('multi-calendar rules', () => {
+  it('defaults a new rule to the user preference', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      await h.patch('/api/settings', { defaultCalendar: 'islamic-umalqura' });
+      const rule = await h.makeRule();
+      expect(rule.calendar).toBe('islamic-umalqura');
+
+      // An explicit value still wins.
+      const override = await h.makeRule({ calendar: 'gregorian' });
+      expect(override.calendar).toBe('gregorian');
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('rejects an unsupported calendar', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      expect(
+        (await h.post('/api/rules', { title: 'x', rrule: 'FREQ=DAILY', calendar: 'julian' }))
+          .statusCode,
+      ).toBe(400);
+      expect((await h.patch('/api/settings', { defaultCalendar: 'mayan' })).statusCode).toBe(400);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('materialises 13/14/15 of every Hijri month as Gregorian dates', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      // The requirement: fast the 13th, 14th and 15th of every Hijri month.
+      await h.makeRule({
+        title: 'Fast',
+        rrule: 'FREQ=MONTHLY;BYMONTHDAY=13,14,15;CALENDAR=ISLAMIC_UMALQURA',
+        calendar: 'islamic-umalqura',
+        dtstartDate: '2026-06-01',
+        createdDate: '2026-06-01',
+      });
+      await h.patch('/api/settings', { lookbackDays: 120, lookaheadDays: 14 });
+
+      const res = await h.get('/api/occurrences?from=2026-06-20&to=2026-08-30');
+      const dates = res.json().map((o: { scheduledDate: string }) => o.scheduledDate).sort();
+      expect(dates).toEqual([
+        '2026-06-28',
+        '2026-06-29',
+        '2026-06-30',
+        '2026-07-27',
+        '2026-07-28',
+        '2026-07-29',
+        '2026-08-26',
+        '2026-08-27',
+        '2026-08-28',
+      ]);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('skips day 30 in a 29-day Hijri month rather than clamping', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      await h.makeRule({
+        title: 'On the 30th',
+        rrule: 'FREQ=MONTHLY;BYMONTHDAY=30;CALENDAR=ISLAMIC_UMALQURA',
+        calendar: 'islamic-umalqura',
+        dtstartDate: '2026-01-01',
+        createdDate: '2026-01-01',
+      });
+      await h.patch('/api/settings', { lookbackDays: 3660, lookaheadDays: 0 });
+
+      const res = await h.get('/api/occurrences?from=2026-01-01&to=2026-10-03');
+      const dates = res.json().map((o: { scheduledDate: string }) => o.scheduledDate).sort();
+      expect(dates.length, JSON.stringify(dates)).toBeGreaterThanOrEqual(4);
+      // The invariant is not that each is the 30th of a Gregorian month � it is
+      // that each maps back to Hijri day 30. A short month must contribute
+      // nothing, never a clamped day 29.
+      for (const d of dates) {
+        expect(toHijri(d, 'islamic-umalqura').day, `${d} -> day 30`).toBe(30);
+      }
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('leaves BYDAY rules unaffected by the calendar', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      // "Monday and Friday" is unambiguous in either calendar.
+      await h.makeRule({
+        title: 'Fast MO FR',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO,FR;CALENDAR=ISLAMIC_UMALQURA',
+        calendar: 'islamic-umalqura',
+        dtstartDate: '2026-09-01',
+        createdDate: '2026-09-01',
+      });
+      const res = await h.get('/api/occurrences?from=2026-09-25&to=2026-10-10');
+      for (const o of res.json()) {
+        const dow = new Date(`${o.scheduledDate}T00:00:00Z`).getUTCDay();
+        expect([1, 5]).toContain(dow);
+      }
+      expect(res.json().length).toBeGreaterThan(0);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('opens a new version when the calendar changes', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      const rule = await h.makeRule();
+      await h.patch(`/api/rules/${rule.id}`, { calendar: 'islamic-umalqura' });
+      expect(h.all('SELECT * FROM rule_versions WHERE rule_id = ?', rule.id)).toHaveLength(2);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('renders a rule date in its own calendar', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      // calendarDate follows settings.defaultCalendar, not the rule's own —
+      // it is the user's display preference.
+      await h.patch('/api/settings', { defaultCalendar: 'islamic-umalqura' });
+      const res = await h.get('/api/day');
+      expect(res.json().calendarDate.year).toBe(1448);
+      expect(res.json().calendarDate).toMatchObject({ month: 4, day: 22 });
     } finally {
       h.cleanup();
     }

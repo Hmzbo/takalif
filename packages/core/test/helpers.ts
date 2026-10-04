@@ -27,6 +27,7 @@ export function settings(overrides: Partial<Settings> = {}): Settings {
     dayRollover: '04:00',
     lookbackDays: 30,
     lookaheadDays: 14,
+    defaultCalendar: 'gregorian' as const,
     email: null,
     ...overrides,
   };
@@ -40,6 +41,7 @@ export function rule(overrides: Partial<Rule> = {}): Rule {
     rrule: 'FREQ=DAILY',
     dtstartDate: '2026-01-01',
     dueTime: null,
+    calendar: 'gregorian' as const,
     createdDate: '2026-01-01',
     trackStreak: false,
     category: null,
