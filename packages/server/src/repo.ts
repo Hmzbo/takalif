@@ -3,7 +3,9 @@ import {
   addDays,
   buildReport,
   DEFAULT_SETTINGS,
+  GREGORIAN,
   generatePlan,
+  isKnownCalendar,
   safeWindowDays,
   todayInTimeZone,
   zonedTimeToUtc,
@@ -30,6 +32,7 @@ interface SettingsRow {
   day_rollover: string;
   lookback_days: number;
   lookahead_days: number;
+  default_calendar: string | null;
   email: string | null;
 }
 
@@ -40,6 +43,7 @@ interface RuleRow {
   rrule: string;
   dtstart_date: string;
   due_time: string | null;
+  calendar: string | null;
   created_date: string;
   track_streak: number;
   category: string | null;
@@ -94,6 +98,9 @@ const toSettings = (r: SettingsRow): Settings => ({
   dayRollover: r.day_rollover,
   lookbackDays: r.lookback_days,
   lookaheadDays: r.lookahead_days,
+  defaultCalendar: isKnownCalendar(r.default_calendar)
+    ? r.default_calendar
+    : DEFAULT_SETTINGS.defaultCalendar,
   email: r.email,
 });
 
@@ -104,6 +111,7 @@ const toRule = (r: RuleRow): Rule => ({
   rrule: r.rrule,
   dtstartDate: r.dtstart_date,
   dueTime: r.due_time,
+  calendar: isKnownCalendar(r.calendar) ? r.calendar : GREGORIAN,
   createdDate: r.created_date,
   trackStreak: r.track_streak === 1,
   category: r.category,
@@ -285,6 +293,8 @@ export interface CreateRuleInput {
   rrule: string;
   dtstartDate: string;
   dueTime?: string | null;
+  /** The calendar the anchors are interpreted in. */
+  calendar: string;
   createdDate: string;
   trackStreak?: boolean;
   category?: string | null;
@@ -297,9 +307,9 @@ export function createRule(db: DB, input: CreateRuleInput): Rule {
 
   const insert = db.transaction(() => {
     db.prepare(
-      `INSERT INTO rules (id, title, description, rrule, dtstart_date, due_time, created_date,
-                          track_streak, category, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      `INSERT INTO rules (id, title, description, rrule, dtstart_date, due_time, calendar,
+                          created_date, track_streak, category, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     ).run(
       id,
       input.title,
@@ -307,6 +317,7 @@ export function createRule(db: DB, input: CreateRuleInput): Rule {
       input.rrule,
       input.dtstartDate,
       input.dueTime ?? null,
+      input.calendar,
       input.createdDate,
       input.trackStreak ? 1 : 0,
       input.category ?? null,
@@ -329,6 +340,7 @@ export interface UpdateRuleInput {
   rrule?: string;
   dtstartDate?: string;
   dueTime?: string | null;
+  calendar?: string;
   trackStreak?: boolean;
   category?: string | null;
   /** Local civil date the new schedule takes effect. Defaults to today. */
@@ -440,12 +452,17 @@ export function updateRule(db: DB, ruleId: string, input: UpdateRuleInput): Rule
 
   const nextRrule = input.rrule ?? current.rrule;
   const nextDtstart = input.dtstartDate ?? current.dtstartDate;
-  const scheduleChanged = nextRrule !== current.rrule || nextDtstart !== current.dtstartDate;
+  // Changing the calendar reinterprets the anchors, so it is a schedule change.
+  const nextCalendar = input.calendar ?? current.calendar;
+  const scheduleChanged =
+    nextRrule !== current.rrule ||
+    nextDtstart !== current.dtstartDate ||
+    nextCalendar !== current.calendar;
 
   const run = db.transaction(() => {
     db.prepare(
       `UPDATE rules SET title = ?, description = ?, rrule = ?, dtstart_date = ?, due_time = ?,
-                        track_streak = ?, category = ?, updated_at = ?
+                        calendar = ?, track_streak = ?, category = ?, updated_at = ?
        WHERE id = ?`,
     ).run(
       input.title ?? current.title,
@@ -453,6 +470,7 @@ export function updateRule(db: DB, ruleId: string, input: UpdateRuleInput): Rule
       nextRrule,
       nextDtstart,
       input.dueTime === undefined ? current.dueTime : input.dueTime,
+      nextCalendar,
       input.trackStreak === undefined ? (current.trackStreak ? 1 : 0) : input.trackStreak ? 1 : 0,
       input.category === undefined ? current.category : input.category,
       ts,
@@ -529,12 +547,13 @@ export function sanitiseSettings(current: Settings, patch: Partial<Settings>): S
 export function updateSettings(db: DB, patch: Partial<Settings>): Settings {
   const next = sanitiseSettings(readSettings(db), patch);
   db.prepare(
-    'UPDATE settings SET timezone = ?, day_rollover = ?, lookback_days = ?, lookahead_days = ?, email = ? WHERE id = 1',
+    'UPDATE settings SET timezone = ?, day_rollover = ?, lookback_days = ?, lookahead_days = ?, default_calendar = ?, email = ? WHERE id = 1',
   ).run(
     next.timezone,
     next.dayRollover,
     next.lookbackDays,
     next.lookaheadDays,
+    next.defaultCalendar,
     next.email ?? null,
   );
   return readSettings(db);

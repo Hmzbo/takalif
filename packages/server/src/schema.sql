@@ -6,12 +6,13 @@
 -- break every subsequent request.
 
 CREATE TABLE IF NOT EXISTS settings (
-  id             INTEGER PRIMARY KEY CHECK (id = 1),
-  timezone       TEXT    NOT NULL DEFAULT 'UTC',
-  day_rollover   TEXT    NOT NULL DEFAULT '04:00',
-  lookback_days  INTEGER NOT NULL DEFAULT 30  CHECK (lookback_days  BETWEEN 0 AND 3660),
-  lookahead_days INTEGER NOT NULL DEFAULT 14  CHECK (lookahead_days BETWEEN 0 AND 3660),
-  email          TEXT
+  id               INTEGER PRIMARY KEY CHECK (id = 1),
+  timezone         TEXT    NOT NULL DEFAULT 'UTC',
+  day_rollover     TEXT    NOT NULL DEFAULT '04:00',
+  lookback_days    INTEGER NOT NULL DEFAULT 30  CHECK (lookback_days  BETWEEN 0 AND 3660),
+  lookahead_days   INTEGER NOT NULL DEFAULT 14  CHECK (lookahead_days BETWEEN 0 AND 3660),
+  default_calendar TEXT    NOT NULL DEFAULT 'gregorian',
+  email            TEXT
 ) STRICT;
 
 INSERT OR IGNORE INTO settings (id) VALUES (1);
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS rules (
   rrule        TEXT    NOT NULL,
   dtstart_date TEXT    NOT NULL,
   due_time     TEXT,
+  calendar     TEXT    NOT NULL DEFAULT 'gregorian',
   created_date TEXT    NOT NULL,
   track_streak INTEGER NOT NULL DEFAULT 0 CHECK (track_streak IN (0, 1)),
   category     TEXT,

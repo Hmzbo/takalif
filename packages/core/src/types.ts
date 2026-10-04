@@ -1,4 +1,5 @@
 import type { LocalDate } from './dates.js';
+import { GREGORIAN, type CalendarKind } from './calendars.js';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -13,6 +14,12 @@ export interface Settings {
   lookbackDays: number;
   /** Days after today the generator materialises. */
   lookaheadDays: number;
+  /**
+   * Default calendar: a display preference and the default for newly created
+   * rules. It does not constrain what a rule can be — a rule may use any
+   * calendar, and several may be in use simultaneously.
+   */
+  defaultCalendar: CalendarKind;
   /** Optional destination for fallback email reminders. */
   email?: string | null;
 }
@@ -22,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dayRollover: '04:00',
   lookbackDays: 30,
   lookaheadDays: 14,
+  defaultCalendar: GREGORIAN,
   email: null,
 };
 
@@ -39,6 +47,14 @@ export interface Rule {
   dtstartDate: LocalDate;
   /** Optional `HH:MM`; when present, lateness becomes derivable. */
   dueTime?: string | null;
+  /**
+   * The calendar this rule's month and day anchors are interpreted in.
+   *
+   * A per-rule property, not a global one: a user tracks a tennis session
+   * every 15 days on the Gregorian calendar and a fast on 13/14/15 of every
+   * Hijri month, side by side. Defaults to the user's preferred calendar.
+   */
+  calendar: CalendarKind;
   /**
    * Local civil date the user created this rule.
    *
