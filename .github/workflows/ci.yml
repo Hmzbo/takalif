@@ -88,3 +88,43 @@ jobs:
 
           echo "-- day view, expect one pending item --"
           curl -fsS http://127.0.0.1:8799/api/day
+
+  docker:
+    name: Docker build and boot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gates the packaging files the way `Build` gates the bundles: a bare
+      # `node_modules` in .dockerignore once shipped absolute host symlinks
+      # into the image, which no typecheck could see.
+      - name: Build image
+        run: docker build -t takalif:ci .
+
+      - name: Boot and probe
+        shell: bash
+        run: |
+          set -e
+          docker run -d --name takalif-ci -p 8798:8787 \
+            -e HOST=0.0.0.0 -e DB_FILE=/data/ci.sqlite takalif:ci
+          trap 'docker rm -f takalif-ci >/dev/null 2>&1 || true' EXIT
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8798/api/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          echo "-- health --"
+          curl -fsS http://127.0.0.1:8798/api/health
+
+          echo ""
+          echo "-- create a rule, expect 201 --"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST http://127.0.0.1:8798/api/rules \
+            -H 'content-type: application/json' \
+            -d '{"title":"CI Docker","rrule":"FREQ=DAILY"}')
+          test "$CODE" = "201"
+
+          echo "-- csv export, expect a header --"
+          curl -fsS 'http://127.0.0.1:8798/api/export/csv?from=2026-01-01&to=2026-12-31' \
+            | head -1 | grep -q '^rule_id,'

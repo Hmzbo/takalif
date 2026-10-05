@@ -81,7 +81,8 @@ cd takalif
 docker compose up -d
 ```
 
-Open <http://localhost:8787>.
+Open <http://localhost:8787>. The ledger lives in a named volume and survives
+image rebuilds; take JSON backups from Settings → Data.
 
 ### From source
 
@@ -89,6 +90,7 @@ Requires Node 22+ and pnpm.
 
 ```bash
 pnpm install
+pnpm build
 pnpm --filter @takalif/server start
 ```
 
@@ -172,9 +174,14 @@ Streaks, when enabled for a rule: `done` extends the run, `missed` breaks it,
 
 ## Project status
 
-Early and in active development. The domain core — the occurrence ledger,
-recurrence generator and statistics — is complete and well tested. The HTTP API
-is in progress. The web client has not started.
+Usable and in active development. Shipped: the domain core (ledger, generator,
+statistics), the HTTP API with SQLite persistence, the PWA (today view, rules,
+stats, settings), server-side reminders (web push with ntfy fallback), and
+export/backup (JSON restore, CSV ledger, VTODO schedules). `docker compose up`
+is the supported install.
+
+Still ahead: releases and versioning, multi-arch images, and wider platform
+testing.
 
 Built as a personal tool first, released openly in the hope it is useful to
 someone else.
@@ -240,9 +247,11 @@ pnpm typecheck
 - **Recurrence edge cases.** If you find a schedule the app gets wrong — a
   daylight-saving boundary, a month-end, an unusual `BYDAY`/`BYSETPOS` combo —
   that is a genuinely valuable bug report.
-- **Portability.** Running on Linux, macOS, or ARM. Only Windows/x64 has been
-  exercised so far.
-- **Accessibility and mobile layout** of the web client, once it exists.
+- **Portability.** Running the Docker image on Linux or ARM, or from source on
+  macOS. Windows/x64 is the only platform exercised so far.
+- **Backup round-trips.** Export the JSON backup, restore it somewhere fresh,
+  and report anything that does not survive.
+- **Accessibility and mobile layout** of the web client.
 
 ### What will not be accepted
 

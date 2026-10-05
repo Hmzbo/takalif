@@ -14,6 +14,8 @@ Read these before changing anything structural.
 | [0004](0004-skip-periods.md) | Skip periods as ranges, excluded from adherence |
 | [0005](0005-multi-calendar-support.md) | Per-rule calendars: Gregorian and Hijri |
 | [0006](0006-pwa-and-self-hosted-server.md) | PWA client, self-hosted server as source of truth |
+| [0007](0007-data-portability.md) | JSON backup/restore, CSV and VTODO export |
+| [0008](0008-container-packaging.md) | One image, one process, one volume |
 
 ## Conventions
 
