@@ -181,6 +181,17 @@ export const api = {
       '/api/push/test',
       withBody('POST', {}),
     ),
+
+  exportUrls: {
+    backupJson: '/api/export/json',
+    ledgerCsv: '/api/export/csv',
+    rulesVtodo: '/api/export/vtodo',
+  },
+  importBackup: (doc: unknown) =>
+    request<{ restored: boolean; rules: number; occurrences: number }>(
+      '/api/import/json',
+      withBody('POST', doc),
+    ),
 };
 
 export type { OccurrenceStatus };
