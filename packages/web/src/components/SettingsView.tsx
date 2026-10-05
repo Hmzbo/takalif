@@ -68,6 +68,10 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
   const [pushMessage, setPushMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(
     null,
   );
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMessage, setImportMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     let live = true;
@@ -174,6 +178,28 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
     });
     if (err) setPushMessage({ kind: 'error', text: err.message });
     setPushBusy(false);
+  }
+
+  async function importBackup(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!window.confirm(`Replace everything on this server with ${file.name}? This cannot be undone.`)) {
+      return;
+    }
+    setImportBusy(true);
+    setImportMessage(null);
+    const err = await runMutation(async () => {
+      const doc = JSON.parse(await file.text());
+      const result = await api.importBackup(doc);
+      setImportMessage({
+        kind: 'info',
+        text: `Restored ${result.rules} rule(s) and ${result.occurrences} occurrence(s).`,
+      });
+      onChanged();
+    });
+    if (err) setImportMessage({ kind: 'error', text: err.message });
+    setImportBusy(false);
   }
 
   if (loadError) {
@@ -336,6 +362,35 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
           )
         )}
         {pushMessage && <Banner kind={pushMessage.kind}>{pushMessage.text}</Banner>}
+
+        <h3 className="section-title">Data</h3>
+        <p className="muted">
+          The JSON backup holds everything and restores it. The CSV is the ledger for
+          spreadsheets; the ICS file carries the schedules to any calendar tool.
+        </p>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          <a className="btn small" href={api.exportUrls.backupJson} download>
+            Download backup (JSON)
+          </a>
+          <a className="btn small" href={api.exportUrls.ledgerCsv} download>
+            Download ledger (CSV)
+          </a>
+          <a className="btn small" href={api.exportUrls.rulesVtodo} download>
+            Download schedules (ICS)
+          </a>
+        </div>
+        <Field
+          label="Restore from backup"
+          hint="Replaces rules, history and settings with the backup file. This device's push subscription stays as it is. This cannot be undone."
+        >
+          <input
+            type="file"
+            accept="application/json,.json"
+            disabled={importBusy}
+            onChange={importBackup}
+          />
+        </Field>
+        {importMessage && <Banner kind={importMessage.kind}>{importMessage.text}</Banner>}
 
         {saveError && <Banner kind="error">{saveError}</Banner>}
         {saved && <Banner kind="info">Saved.</Banner>}
