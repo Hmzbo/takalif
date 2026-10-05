@@ -95,6 +95,20 @@ function RecoveryBanner({
   );
 }
 
+/**
+ * A `?date=YYYY-MM-DD` query param deep-links to that day. Notification taps
+ * use it so a reminder opens on the day it refers to; anything else is
+ * ignored and the view falls back to today.
+ */
+function initialDateParam(): string | null {
+  try {
+    const date = new URLSearchParams(window.location.search).get('date');
+    return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+  } catch {
+    return null;
+  }
+}
+
 export function TodayView({
   settings,
   onReviewRange,
@@ -102,7 +116,7 @@ export function TodayView({
   settings: Settings | null;
   onReviewRange: (from: string, to: string) => void;
 }) {
-  const [date, setDate] = useState<string | null>(null);
+  const [date, setDate] = useState<string | null>(initialDateParam);
   const day: Resource<Awaited<ReturnType<typeof api.day>>> = useResource(
     `day:${date ?? 'today'}`,
     () => api.day(date ?? undefined),

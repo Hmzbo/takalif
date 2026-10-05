@@ -118,10 +118,37 @@ Everything is optional; the defaults work.
 | `HOST` | `127.0.0.1` | Bind address. Set `0.0.0.0` to expose on your network |
 | `DB_FILE` | `./data/takalif.sqlite` | SQLite database location |
 | `WEB_DIST` | `./packages/web/dist` | Built PWA to serve, when present |
+| `VAPID_PUBLIC_KEY` | — | Web-push public key. Without both keys, push stays disabled |
+| `VAPID_PRIVATE_KEY` | — | Web-push private key. Generate a pair, keep this secret |
+| `VAPID_SUBJECT` | `mailto:takalif@localhost` | Contact URN attached to push requests |
 
 The server is single-user by design: no accounts, no user table. If you expose it
 beyond your own machine, put it behind a reverse proxy that handles
 authentication.
+
+---
+
+## Reminders
+
+Set a reminder time on any rule and the server notifies you on days it is due.
+The check runs once a minute, server-side, so it works whether or not any
+client is open. Each occurrence is reminded at most once.
+
+Two delivery channels, either or both:
+
+1. **Web push.** Generate a key pair once and set the env vars above:
+   ```bash
+   npx web-push generate-vapid-keys
+   ```
+   Then open Settings → Notifications → **Enable on this device**, and use
+   **Send test** to confirm the whole path works before trusting it.
+2. **ntfy fallback.** Set an ntfy topic in Settings (and optionally your own
+   server instead of ntfy.sh), subscribe to the topic in the ntfy app, and
+   reminders arrive there too — no account, no per-device setup. On the public
+   server, pick an unguessable topic name: anyone who knows it can read it.
+
+Dead push subscriptions (reported gone by the push service) are pruned
+automatically.
 
 ---
 

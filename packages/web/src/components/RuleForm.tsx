@@ -20,6 +20,7 @@ export interface RuleFormValue {
   calendar: CalendarKind;
   dtstartDate: string;
   dueTime: string;
+  reminderTime: string;
   trackStreak: boolean;
   category: string;
   effectiveFrom: string;
@@ -33,6 +34,7 @@ function initialValue(rule: Rule | null, today: string): RuleFormValue {
     calendar: rule?.calendar ?? 'gregorian',
     dtstartDate: rule?.dtstartDate ?? today,
     dueTime: rule?.dueTime ?? '',
+    reminderTime: rule?.reminderTime ?? '',
     trackStreak: rule?.trackStreak ?? false,
     category: rule?.category ?? '',
     effectiveFrom: today,
@@ -137,6 +139,7 @@ export function RuleForm({
           rrule: value.rrule.trim(),
           dtstartDate: value.dtstartDate || undefined,
           dueTime: value.dueTime || null,
+          reminderTime: value.reminderTime || null,
           calendar: value.calendar,
           trackStreak: value.trackStreak,
           category: value.category.trim() || null,
@@ -149,6 +152,7 @@ export function RuleForm({
           rrule: value.rrule.trim(),
           dtstartDate: value.dtstartDate || undefined,
           dueTime: value.dueTime || null,
+          reminderTime: value.reminderTime || null,
           calendar: value.calendar,
           trackStreak: value.trackStreak,
           category: value.category.trim() || null,
@@ -305,6 +309,17 @@ export function RuleForm({
 
       <Field label="Due time (optional)" hint="When set, lateness becomes measurable.">
         <input type="time" value={value.dueTime} onChange={(e) => set('dueTime', e.target.value)} />
+      </Field>
+
+      <Field
+        label="Remind me at (optional)"
+        hint="The server sends a push notification at this time on days this rule is due. Leave empty for no reminder."
+      >
+        <input
+          type="time"
+          value={value.reminderTime}
+          onChange={(e) => set('reminderTime', e.target.value)}
+        />
       </Field>
 
       <Field label="Category (optional)">

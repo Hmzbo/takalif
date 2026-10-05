@@ -21,6 +21,8 @@ Schema lives in `packages/server/src/schema.sql`.
 | `lookback_days` | INTEGER | Days before today the generator materialises. Default `30` |
 | `lookahead_days` | INTEGER | Days after today. Default `14` |
 | `email` | TEXT | Optional destination for fallback reminders |
+| `ntfy_topic` | TEXT | Optional ntfy topic for the reminder fallback |
+| `ntfy_server` | TEXT | Optional ntfy server base URL; empty means the public default |
 
 ### `rules`
 
@@ -32,9 +34,10 @@ Schema lives in `packages/server/src/schema.sql`.
 | `rrule` | TEXT | RFC 5545 value, e.g. `FREQ=WEEKLY;BYDAY=TU;INTERVAL=2` |
 | `dtstart_date` | TEXT | Local civil date the schedule starts |
 | `due_time` | TEXT | Optional `HH:MM`; enables lateness |
+| `reminder_time` | TEXT | Optional `HH:MM`; the server reminds at this time. Not a schedule change, so it never opens a version |
 | `created_date` | TEXT | Local civil date the rule was created |
 | `track_streak` | INTEGER | Opt-in. Streaks are off by default |
-| `calendar` | TEXT | Per-rule calendar. **Planned, not yet implemented** — see [ADR 0005](adr/0005-multi-calendar-support.md) |
+| `calendar` | TEXT | Per-rule calendar. See [ADR 0005](adr/0005-multi-calendar-support.md) |
 | `category` | TEXT | |
 | `active` | INTEGER | Soft delete. History is always preserved |
 | `created_at` / `updated_at` | TEXT | ISO timestamps |
@@ -71,6 +74,7 @@ reinterpreted when a schedule changes.
 | `status` | TEXT | `pending` \| `done` \| `missed` \| `skipped` |
 | `completed_at` | TEXT | |
 | `note` | TEXT | |
+| `reminded_at` | TEXT | When a reminder was sent. Server bookkeeping, not ledger state |
 | `created_at` / `updated_at` | TEXT | |
 
 Unique on `(rule_id, scheduled_date)` — this is what makes the generator

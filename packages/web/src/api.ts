@@ -102,6 +102,7 @@ export const api = {
     rrule: string;
     dtstartDate?: string;
     dueTime?: string | null;
+    reminderTime?: string | null;
     calendar?: CalendarKind;
     createdDate?: string;
     trackStreak?: boolean;
@@ -115,6 +116,7 @@ export const api = {
       rrule?: string;
       dtstartDate?: string;
       dueTime?: string | null;
+      reminderTime?: string | null;
       calendar?: CalendarKind;
       trackStreak?: boolean;
       category?: string | null;
@@ -165,6 +167,20 @@ export const api = {
     }
     return request<PeriodReport>(`/api/stats?${q.toString()}`);
   },
+
+  pushPublicKey: () => request<{ publicKey: string }>('/api/push/public-key'),
+  pushSubscribe: (input: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    request<{ subscribed: boolean; endpoint: string }>(
+      '/api/push/subscribe',
+      withBody('POST', input),
+    ),
+  pushUnsubscribe: (endpoint: string) =>
+    request<{ removed: boolean }>('/api/push/unsubscribe', withBody('DELETE', { endpoint })),
+  pushTest: () =>
+    request<{ checked: number; sent: number; failed: number; pruned: number }>(
+      '/api/push/test',
+      withBody('POST', {}),
+    ),
 };
 
 export type { OccurrenceStatus };

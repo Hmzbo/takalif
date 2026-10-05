@@ -90,8 +90,8 @@
 - **R8.1** Web Push notifications for due occurrences.
 - **R8.2** Reminders are scheduled server-side, so they fire without the client
   being open.
-- **R8.3** An email fallback exists because desktop push requires the browser to
-  be running.
+- **R8.3** An ntfy fallback exists because desktop push requires the browser to
+  be running. Email remains a listed destination for a later fallback.
 
 ---
 
