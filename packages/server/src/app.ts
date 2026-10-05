@@ -22,9 +22,11 @@ import {
   bulkExcuseOccurrences,
   createRule,
   createSkipPeriod,
+  deleteSubscription,
   deleteSkipPeriod,
   excuseOccurrence,
   isOccurrenceElapsed,
+  listSubscriptions,
   materialize,
   previewRuleEdit,
   readOccurrence,
@@ -33,11 +35,17 @@ import {
   readSettings,
   readSkipPeriods,
   resetOccurrence,
+  saveSubscription,
   setOccurrenceStatus,
   updateRule,
   updateSettings,
   type UpdateRuleInput,
 } from './repo.js';
+import {
+  pushConfigured,
+  sendTestNotification,
+  type PushConfig,
+} from './reminders.js';
 
 /** Default clock: wall time. Tests inject a fixed one. */
 const wallClock = (): Date => new Date();
@@ -84,6 +92,12 @@ export interface BuildAppOptions {
    * clock.
    */
   now?: () => Date;
+  /**
+   * Web-push credentials, read from VAPID_* env vars by index.ts. Absent means
+   * push delivery is disabled; the subscribe and test routes answer 503 rather
+   * than accepting subscriptions that can never fire.
+   */
+  push?: PushConfig;
 }
 
 export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance {
@@ -219,6 +233,22 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
         return badRequest(reply, 'email must be a valid address');
       }
     }
+    if (input.ntfyTopic !== undefined && input.ntfyTopic !== null) {
+      if (
+        typeof input.ntfyTopic !== 'string' ||
+        !/^[A-Za-z0-9_\-/]{1,64}$/.test(input.ntfyTopic)
+      ) {
+        return badRequest(
+          reply,
+          'ntfyTopic must be 1-64 characters of letters, numbers, -, _ or /',
+        );
+      }
+    }
+    if (input.ntfyServer !== undefined && input.ntfyServer !== null) {
+      if (typeof input.ntfyServer !== 'string' || !/^https?:\/\/.{1,200}$/i.test(input.ntfyServer)) {
+        return badRequest(reply, 'ntfyServer must be an http(s) URL');
+      }
+    }
 
     // Sync *after* the write. Syncing first meant a corrupt value made this
     // endpoint 500 before it could repair itself.
@@ -262,6 +292,14 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     if (input.dueTime != null && !isValidTime(String(input.dueTime))) {
       return badRequest(reply, 'dueTime must be HH:MM');
     }
+    if (
+      input.reminderTime !== undefined &&
+      input.reminderTime !== null &&
+      input.reminderTime !== '' &&
+      !isValidTime(String(input.reminderTime))
+    ) {
+      return badRequest(reply, 'reminderTime must be HH:MM');
+    }
 
     // Validate the calendar before creating: an unsupported value is a bad
     // request, not a server fault.
@@ -279,6 +317,10 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
       dtstartDate,
       dueTime: input.dueTime == null ? null : String(input.dueTime),
       calendar,
+      reminderTime:
+        input.reminderTime === undefined || input.reminderTime === null || input.reminderTime === ''
+          ? null
+          : String(input.reminderTime),
       createdDate: created,
       trackStreak: input.trackStreak === true,
       category: category.value,
@@ -313,6 +355,14 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     if (input.dueTime != null && !isValidTime(String(input.dueTime))) {
       return badRequest(reply, 'dueTime must be HH:MM');
     }
+    if (
+      input.reminderTime !== undefined &&
+      input.reminderTime !== null &&
+      input.reminderTime !== '' &&
+      !isValidTime(String(input.reminderTime))
+    ) {
+      return badRequest(reply, 'reminderTime must be HH:MM');
+    }
     if (input.trackStreak !== undefined && typeof input.trackStreak !== 'boolean') {
       return badRequest(reply, 'trackStreak must be a boolean');
     }
@@ -332,6 +382,12 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     if (dtstartDate !== undefined) patch.dtstartDate = dtstartDate;
     if (input.dueTime !== undefined) {
       patch.dueTime = input.dueTime === null ? null : String(input.dueTime);
+    }
+    if (input.reminderTime !== undefined) {
+      patch.reminderTime =
+        input.reminderTime === null || input.reminderTime === ''
+          ? null
+          : String(input.reminderTime);
     }
     if (typeof input.trackStreak === 'boolean') patch.trackStreak = input.trackStreak;
 
@@ -558,6 +614,60 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     if (!removed) return notFound(reply, 'Skip period not found');
     sync();
     return { removed: true };
+  });
+
+  // -- push notifications ---------------------------------------------------
+  // Web push needs VAPID credentials (see README). Without them the subscribe
+  // and test routes answer 503 rather than accepting subscriptions that can
+  // never fire. ntfy needs no server-side credentials, only a topic.
+
+  const pushConfig: PushConfig = options.push ?? {};
+  const pushUnavailable = (reply: FastifyReply) =>
+    fail(reply, 503, 'Push notifications are not configured: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY');
+
+  app.get('/api/push/public-key', async (req, reply) => {
+    if (!pushConfigured(pushConfig)) return pushUnavailable(reply);
+    return { publicKey: pushConfig.publicKey };
+  });
+
+  app.post('/api/push/subscribe', async (req, reply) => {
+    if (!pushConfigured(pushConfig)) return pushUnavailable(reply);
+    const input = body(req.body);
+    const endpoint = single(input.endpoint) ?? '';
+    const keys = input.keys && typeof input.keys === 'object' ? (input.keys as Record<string, unknown>) : null;
+    const p256dh = keys && typeof keys.p256dh === 'string' ? keys.p256dh : '';
+    const auth = keys && typeof keys.auth === 'string' ? keys.auth : '';
+    if (!endpoint || endpoint.length > 2000) {
+      return badRequest(reply, 'endpoint must be a non-empty URL of at most 2000 characters');
+    }
+    if (!/^https?:\/\//i.test(endpoint)) {
+      return badRequest(reply, 'endpoint must be an http(s) URL');
+    }
+    if (!p256dh || p256dh.length > 500 || !auth || auth.length > 500) {
+      return badRequest(reply, 'keys.p256dh and keys.auth must be non-empty strings');
+    }
+    const sub = saveSubscription(db, { endpoint, p256dh, auth });
+    return reply.code(201).send({ subscribed: true, endpoint: sub.endpoint });
+  });
+
+  app.delete('/api/push/unsubscribe', async (req, reply) => {
+    const input = body(req.body);
+    const endpoint = single(input.endpoint) ?? '';
+    if (!endpoint) return badRequest(reply, 'endpoint is required');
+    const removed = deleteSubscription(db, endpoint);
+    if (!removed) return notFound(reply, 'Subscription not found');
+    return { removed: true };
+  });
+
+  app.post('/api/push/test', async (req, reply) => {
+    const settings = readSettings(db);
+    const ntfyOn = Boolean((settings.ntfyTopic ?? '').trim());
+    const pushOn = pushConfigured(pushConfig) && listSubscriptions(db).length > 0;
+    if (!pushOn && !ntfyOn) {
+      return fail(reply, 503, 'No notification channel configured: subscribe a device or set an ntfy topic');
+    }
+    const result = await sendTestNotification(db, pushConfig);
+    return result;
   });
 
   // -- statistics -----------------------------------------------------------

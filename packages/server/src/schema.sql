@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS settings (
   lookback_days    INTEGER NOT NULL DEFAULT 30  CHECK (lookback_days  BETWEEN 0 AND 3660),
   lookahead_days   INTEGER NOT NULL DEFAULT 14  CHECK (lookahead_days BETWEEN 0 AND 3660),
   default_calendar TEXT    NOT NULL DEFAULT 'gregorian',
-  email            TEXT
+  email            TEXT,
+  ntfy_topic       TEXT,
+  ntfy_server      TEXT
 ) STRICT;
 
 INSERT OR IGNORE INTO settings (id) VALUES (1);
@@ -25,6 +27,7 @@ CREATE TABLE IF NOT EXISTS rules (
   dtstart_date TEXT    NOT NULL,
   due_time     TEXT,
   calendar     TEXT    NOT NULL DEFAULT 'gregorian',
+  reminder_time TEXT,
   created_date TEXT    NOT NULL,
   track_streak INTEGER NOT NULL DEFAULT 0 CHECK (track_streak IN (0, 1)),
   category     TEXT,
@@ -58,6 +61,7 @@ CREATE TABLE IF NOT EXISTS occurrences (
   status         TEXT    NOT NULL CHECK (status IN ('pending', 'done', 'missed', 'skipped')),
   completed_at   TEXT,
   note           TEXT,
+  reminded_at    TEXT,
   created_at     TEXT    NOT NULL,
   updated_at     TEXT    NOT NULL,
   UNIQUE (rule_id, scheduled_date)

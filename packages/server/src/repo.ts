@@ -34,6 +34,8 @@ interface SettingsRow {
   lookahead_days: number;
   default_calendar: string | null;
   email: string | null;
+  ntfy_topic: string | null;
+  ntfy_server: string | null;
 }
 
 interface RuleRow {
@@ -44,6 +46,7 @@ interface RuleRow {
   dtstart_date: string;
   due_time: string | null;
   calendar: string | null;
+  reminder_time: string | null;
   created_date: string;
   track_streak: number;
   category: string | null;
@@ -102,6 +105,8 @@ const toSettings = (r: SettingsRow): Settings => ({
     ? r.default_calendar
     : DEFAULT_SETTINGS.defaultCalendar,
   email: r.email,
+  ntfyTopic: r.ntfy_topic,
+  ntfyServer: r.ntfy_server,
 });
 
 const toRule = (r: RuleRow): Rule => ({
@@ -112,6 +117,7 @@ const toRule = (r: RuleRow): Rule => ({
   dtstartDate: r.dtstart_date,
   dueTime: r.due_time,
   calendar: isKnownCalendar(r.calendar) ? r.calendar : GREGORIAN,
+  reminderTime: r.reminder_time,
   createdDate: r.created_date,
   trackStreak: r.track_streak === 1,
   category: r.category,
@@ -295,6 +301,8 @@ export interface CreateRuleInput {
   dueTime?: string | null;
   /** The calendar the anchors are interpreted in. */
   calendar: string;
+  /** Optional `HH:MM` reminder for that day's occurrence. Null disables. */
+  reminderTime?: string | null;
   createdDate: string;
   trackStreak?: boolean;
   category?: string | null;
@@ -308,8 +316,8 @@ export function createRule(db: DB, input: CreateRuleInput): Rule {
   const insert = db.transaction(() => {
     db.prepare(
       `INSERT INTO rules (id, title, description, rrule, dtstart_date, due_time, calendar,
-                          created_date, track_streak, category, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+                          reminder_time, created_date, track_streak, category, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     ).run(
       id,
       input.title,
@@ -318,6 +326,7 @@ export function createRule(db: DB, input: CreateRuleInput): Rule {
       input.dtstartDate,
       input.dueTime ?? null,
       input.calendar,
+      input.reminderTime ?? null,
       input.createdDate,
       input.trackStreak ? 1 : 0,
       input.category ?? null,
@@ -341,6 +350,8 @@ export interface UpdateRuleInput {
   dtstartDate?: string;
   dueTime?: string | null;
   calendar?: string;
+  /** Reminder time is display/scheduling metadata, not a schedule change. */
+  reminderTime?: string | null;
   trackStreak?: boolean;
   category?: string | null;
   /** Local civil date the new schedule takes effect. Defaults to today. */
@@ -462,7 +473,7 @@ export function updateRule(db: DB, ruleId: string, input: UpdateRuleInput): Rule
   const run = db.transaction(() => {
     db.prepare(
       `UPDATE rules SET title = ?, description = ?, rrule = ?, dtstart_date = ?, due_time = ?,
-                        calendar = ?, track_streak = ?, category = ?, updated_at = ?
+                        calendar = ?, reminder_time = ?, track_streak = ?, category = ?, updated_at = ?
        WHERE id = ?`,
     ).run(
       input.title ?? current.title,
@@ -471,6 +482,7 @@ export function updateRule(db: DB, ruleId: string, input: UpdateRuleInput): Rule
       nextDtstart,
       input.dueTime === undefined ? current.dueTime : input.dueTime,
       nextCalendar,
+      input.reminderTime === undefined ? (current.reminderTime ?? null) : input.reminderTime,
       input.trackStreak === undefined ? (current.trackStreak ? 1 : 0) : input.trackStreak ? 1 : 0,
       input.category === undefined ? current.category : input.category,
       ts,
@@ -547,7 +559,7 @@ export function sanitiseSettings(current: Settings, patch: Partial<Settings>): S
 export function updateSettings(db: DB, patch: Partial<Settings>): Settings {
   const next = sanitiseSettings(readSettings(db), patch);
   db.prepare(
-    'UPDATE settings SET timezone = ?, day_rollover = ?, lookback_days = ?, lookahead_days = ?, default_calendar = ?, email = ? WHERE id = 1',
+    'UPDATE settings SET timezone = ?, day_rollover = ?, lookback_days = ?, lookahead_days = ?, default_calendar = ?, email = ?, ntfy_topic = ?, ntfy_server = ? WHERE id = 1',
   ).run(
     next.timezone,
     next.dayRollover,
@@ -555,6 +567,8 @@ export function updateSettings(db: DB, patch: Partial<Settings>): Settings {
     next.lookaheadDays,
     next.defaultCalendar,
     next.email ?? null,
+    next.ntfyTopic ?? null,
+    next.ntfyServer ?? null,
   );
   return readSettings(db);
 }
@@ -675,6 +689,118 @@ export function archiveRule(db: DB, ruleId: string, today: string): boolean {
     ).run(ruleId, today);
   })();
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Push subscriptions and reminders
+// ---------------------------------------------------------------------------
+
+export interface PushSubscription {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  createdAt: string;
+}
+
+/** Insert or replace by endpoint: re-subscribing refreshes keys, it never duplicates. */
+export function saveSubscription(
+  db: DB,
+  input: { endpoint: string; p256dh: string; auth: string },
+): PushSubscription {
+  const ts = nowIso();
+  db.prepare(
+    `INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth`,
+  ).run(input.endpoint, input.p256dh, input.auth, ts);
+  const row = db
+    .prepare('SELECT endpoint, p256dh, auth, created_at FROM push_subscriptions WHERE endpoint = ?')
+    .get(input.endpoint) as { endpoint: string; p256dh: string; auth: string; created_at: string };
+  return { endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth, createdAt: row.created_at };
+}
+
+export function deleteSubscription(db: DB, endpoint: string): boolean {
+  return db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint).changes > 0;
+}
+
+export function listSubscriptions(db: DB): PushSubscription[] {
+  return (
+    db.prepare('SELECT endpoint, p256dh, auth, created_at FROM push_subscriptions').all() as {
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+      created_at: string;
+    }[]
+  ).map((r) => ({ endpoint: r.endpoint, p256dh: r.p256dh, auth: r.auth, createdAt: r.created_at }));
+}
+
+export interface DueReminder {
+  occurrenceId: string;
+  ruleId: string;
+  ruleTitle: string;
+  scheduledDate: string;
+  dueTime: string | null;
+  reminderTime: string;
+}
+
+/**
+ * Occurrences owed a reminder right now: today's rows, still pending, never
+ * reminded, belonging to a rule with a reminder time that has passed.
+ *
+ * Only today's occurrences qualify. Reminding for a missed yesterday would nag
+ * about history; reminding for tomorrow would nag too early. The comparison
+ * uses the user's timezone, never the server's.
+ */
+export function findDueReminders(db: DB, now: Date = new Date()): DueReminder[] {
+  const settings = readSettings(db);
+  const today = todayInTimeZone(settings.timezone, now);
+  const rows = db
+    .prepare(
+      `SELECT o.id AS occurrence_id, o.rule_id, r.title AS rule_title,
+              o.scheduled_date, o.due_time, r.reminder_time
+       FROM occurrences o
+       JOIN rules r ON r.id = o.rule_id
+       WHERE o.scheduled_date = ?
+         AND o.status = 'pending'
+         AND o.reminded_at IS NULL
+         AND r.active = 1
+         AND r.reminder_time IS NOT NULL`,
+    )
+    .all(today) as {
+    occurrence_id: string;
+    rule_id: string;
+    rule_title: string;
+    scheduled_date: string;
+    due_time: string | null;
+    reminder_time: string;
+  }[];
+
+  return rows
+    .filter((r) => {
+      try {
+        return now.getTime() >= zonedTimeToUtc(today, r.reminder_time, settings.timezone).getTime();
+      } catch {
+        // A corrupt reminder_time must not break the whole tick.
+        return false;
+      }
+    })
+    .map((r) => ({
+      occurrenceId: r.occurrence_id,
+      ruleId: r.rule_id,
+      ruleTitle: r.rule_title,
+      scheduledDate: r.scheduled_date,
+      dueTime: r.due_time,
+      reminderTime: r.reminder_time,
+    }));
+}
+
+/** Record that an occurrence has been reminded so the next tick skips it. */
+export function markReminded(db: DB, occurrenceIds: string[]): void {
+  if (occurrenceIds.length === 0) return;
+  const placeholders = occurrenceIds.map(() => '?').join(',');
+  db.prepare(
+    `UPDATE occurrences SET reminded_at = ?, updated_at = ? WHERE id IN (${placeholders})`,
+  ).run(nowIso(), nowIso(), ...occurrenceIds);
 }
 
 // ---------------------------------------------------------------------------
