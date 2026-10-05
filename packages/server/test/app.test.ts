@@ -286,6 +286,207 @@ describe('occurrence lifecycle', () => {
       h.cleanup();
     }
   });
+
+  it('refuses to excuse a success on record', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      await h.makeRule();
+      const occ = await h.occurrenceOn(await h.today());
+      expect((await h.post(`/api/occurrences/${occ.id}/done`)).statusCode).toBe(200);
+
+      const res = await h.post(`/api/occurrences/${occ.id}/excuse`);
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toMatch(/already done/);
+
+      // Still done, not skipped.
+      const stored = h.all<{ status: string }>('SELECT status FROM occurrences WHERE id = ?', occ.id)[0]!;
+      expect(stored.status).toBe('done');
+    } finally {
+      h.cleanup();
+    }
+  });
+});
+
+describe('bulk excuse', () => {
+  it('resolves a recovery prompt end to end', async () => {
+    // Simulate a three-week absence: materialise with the clock frozen, move
+    // it forward, and the next sync sweeps a wall of misses that surfaces a
+    // prompt — exactly what the UI's recovery banner consumes.
+    let now = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(now));
+
+    try {
+      await h.makeRule();
+      expect((await h.get('/api/day')).json().recoveryPrompt).toBeNull();
+
+      now = new Date('2026-10-24T12:00:00Z');
+      const prompted = await h.get('/api/day');
+      const prompt = prompted.json().recoveryPrompt;
+      expect(prompt, 'expected a recovery prompt after a three-week absence').not.toBeNull();
+      expect(prompt.count).toBeGreaterThanOrEqual(14);
+
+      const bulk = await h.post('/api/occurrences/bulk-excuse', {
+        from: prompt.from,
+        to: prompt.to,
+        ruleIds: prompt.ruleIds,
+      });
+      expect(bulk.statusCode).toBe(200);
+      expect(bulk.json().excused).toBe(prompt.count);
+
+      // The wall is excused, so there is nothing left to prompt about.
+      expect((await h.get('/api/day')).json().recoveryPrompt).toBeNull();
+
+      const stats = await h.get('/api/stats?from=2026-10-01&to=2026-10-24');
+      expect(stats.json().overall.counts.missed).toBe(0);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('excuses every unlogged occurrence in a range and reports the count', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      // Widen the window so past dates are materialised at all.
+      await h.patch('/api/settings', { lookbackDays: 3660 });
+      await h.makeRule({ createdDate: '2026-01-01', dtstartDate: '2026-01-01' });
+
+      const res = await h.post('/api/occurrences/bulk-excuse', {
+        from: '2026-01-01',
+        to: '2026-01-31',
+      });
+      expect(res.statusCode).toBe(200);
+      // Jan has 31 daily occurrences, all swept to missed under the frozen clock.
+      expect(res.json().excused).toBe(31);
+
+      const stats = await h.get('/api/stats?from=2026-01-01&to=2026-01-31');
+      expect(stats.json().overall.counts.skipped).toBe(31);
+      expect(stats.json().overall.counts.missed).toBe(0);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('never touches a success on record', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      await h.patch('/api/settings', { lookbackDays: 3660 });
+      await h.makeRule({ createdDate: '2026-01-01', dtstartDate: '2026-01-01' });
+
+      // Complete today's occurrence while its day is still open.
+      const today = (await h.get('/api/occurrences?from=2026-10-03&to=2026-10-03')).json()[0];
+      expect((await h.post(`/api/occurrences/${today.id}/done`)).statusCode).toBe(200);
+
+      const before = h.all<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM occurrences WHERE scheduled_date BETWEEN ? AND ? AND status IN ('pending', 'missed')",
+        '2026-01-01',
+        '2026-10-03',
+      )[0]!.n;
+
+      const res = await h.post('/api/occurrences/bulk-excuse', {
+        from: '2026-01-01',
+        to: '2026-10-03',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().excused).toBe(before);
+
+      const stored = h.all<{ status: string }>(
+        'SELECT status FROM occurrences WHERE id = ?',
+        today.id,
+      )[0]!;
+      expect(stored.status).toBe('done');
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('respects the rule filter', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      await h.patch('/api/settings', { lookbackDays: 3660 });
+      const a = await h.makeRule({ title: 'A', createdDate: '2026-01-01', dtstartDate: '2026-01-01' });
+      await h.makeRule({ title: 'B', createdDate: '2026-01-01', dtstartDate: '2026-01-01' });
+
+      const res = await h.post('/api/occurrences/bulk-excuse', {
+        from: '2026-01-01',
+        to: '2026-01-10',
+        ruleIds: [a.id],
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().excused).toBe(10);
+
+      const counts = h.all<{ rule_id: string; n: number }>(
+        "SELECT rule_id, COUNT(*) AS n FROM occurrences WHERE status = 'skipped' GROUP BY rule_id",
+      );
+      expect(counts).toHaveLength(1);
+      expect(counts[0]!.rule_id).toBe(a.id);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('validates the range and the rule list', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      expect(
+        (await h.post('/api/occurrences/bulk-excuse', { from: '2026-02-31', to: '2026-03-01' }))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (await h.post('/api/occurrences/bulk-excuse', { from: '2026-03-02', to: '2026-03-01' }))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (await h.post('/api/occurrences/bulk-excuse', { from: '1000-01-01', to: '9999-12-31' }))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (await h.post('/api/occurrences/bulk-excuse', {
+          from: '2026-01-01',
+          to: '2026-01-31',
+          ruleIds: 'nope',
+        })).statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await h.post('/api/occurrences/bulk-excuse', {
+            from: '2026-01-01',
+            to: '2026-01-31',
+            ruleIds: [123],
+          })
+        ).statusCode,
+      ).toBe(400);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('is reachable and not swallowed by the :id routes', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      // An empty range excuses nothing but must answer 200 with a count,
+      // proving the static route wins over /:id/done-style params.
+      const res = await h.post('/api/occurrences/bulk-excuse', {
+        from: '2026-01-01',
+        to: '2026-01-01',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().excused).toBe(0);
+    } finally {
+      h.cleanup();
+    }
+  });
 });
 
 describe('settings cannot brick the API', () => {
@@ -437,6 +638,27 @@ describe('validation returns real status codes', () => {
     try {
       const res = await h.get('/api/stats?from=1000-01-01&to=9999-13-45');
       expect(res.statusCode).toBe(400);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('resolves presets to trailing windows ending today', async () => {
+    const NOW = new Date('2026-10-03T12:00:00Z');
+    const h = harness(() => new Date(NOW));
+
+    try {
+      // Adherence looks back at what happened; a forward window would always
+      // report null because everything in it is still pending.
+      const week = await h.get('/api/stats?preset=week');
+      expect(week.json().from).toBe('2026-09-27');
+      expect(week.json().to).toBe('2026-10-03');
+
+      const month = await h.get('/api/stats?preset=month');
+      expect(month.json().from).toBe('2026-09-04');
+      expect(month.json().to).toBe('2026-10-03');
+
+      expect((await h.get('/api/stats?preset=fortnight')).statusCode).toBe(400);
     } finally {
       h.cleanup();
     }
