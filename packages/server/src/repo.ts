@@ -1,16 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import {
   addDays,
+  buildBackup,
   buildReport,
   DEFAULT_SETTINGS,
   GREGORIAN,
   generatePlan,
   isKnownCalendar,
+  parseBackupDocument,
   safeWindowDays,
   todayInTimeZone,
+  toLedgerCsvRows,
   zonedTimeToUtc,
+  type BackupDocument,
   type Exception,
   type GeneratorPlan,
+  type LedgerCsvRow,
   type Occurrence,
   type PeriodReport,
   type Rule,
@@ -193,6 +198,14 @@ export function readOccurrences(db: DB, from: string, to: string): Occurrence[] 
       'SELECT * FROM occurrences WHERE scheduled_date BETWEEN ? AND ? ORDER BY scheduled_date, rule_id',
     )
     .all(from, to) as OccurrenceRow[];
+  return rows.map(toOccurrence);
+}
+
+/** Every ledger row, unbounded. Backups must include history the window has scrolled past. */
+export function readAllOccurrences(db: DB): Occurrence[] {
+  const rows = db
+    .prepare('SELECT * FROM occurrences ORDER BY scheduled_date, rule_id')
+    .all() as OccurrenceRow[];
   return rows.map(toOccurrence);
 }
 
@@ -801,6 +814,142 @@ export function markReminded(db: DB, occurrenceIds: string[]): void {
   db.prepare(
     `UPDATE occurrences SET reminded_at = ?, updated_at = ? WHERE id IN (${placeholders})`,
   ).run(nowIso(), nowIso(), ...occurrenceIds);
+}
+
+// ---------------------------------------------------------------------------
+// Backup, restore and ledger export
+// ---------------------------------------------------------------------------
+
+export interface RestoreCounts {
+  rules: number;
+  ruleVersions: number;
+  occurrences: number;
+  skipPeriods: number;
+  exceptions: number;
+}
+
+/**
+ * Assemble a complete backup document.
+ *
+ * `push_subscriptions` are excluded on purpose: device endpoints cannot be
+ * restored anywhere else.
+ */
+export function readAllForBackup(db: DB, now: Date = new Date()): BackupDocument {
+  return buildBackup(
+    {
+      settings: readSettings(db),
+      rules: readRules(db, true),
+      ruleVersions: readVersions(db),
+      occurrences: readAllOccurrences(db),
+      skipPeriods: readSkipPeriods(db),
+      exceptions: readExceptions(db),
+    },
+    now,
+  );
+}
+
+/**
+ * Replace the entire dataset with a validated backup, atomically.
+ *
+ * Validation runs before any row is touched, so a corrupt file leaves the
+ * database exactly as it was. Restore is an explicit user action, which is
+ * why it may write terminal rows that the generator never would.
+ *
+ * Reminder bookkeeping (`reminded_at`) is reset: it records that *this*
+ * server already sent a notification, not ledger state.
+ */
+export function restoreBackup(db: DB, input: unknown): RestoreCounts {
+  const doc = parseBackupDocument(input);
+  const ts = nowIso();
+
+  const run = db.transaction(() => {
+    db.exec('DELETE FROM occurrences; DELETE FROM rule_versions; DELETE FROM rules; DELETE FROM skip_periods; DELETE FROM exceptions;');
+
+    const insertRule = db.prepare(
+      `INSERT INTO rules (id, title, description, rrule, dtstart_date, due_time, calendar,
+                          reminder_time, created_date, track_streak, category, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const r of doc.rules) {
+      insertRule.run(
+        r.id,
+        r.title,
+        r.description ?? null,
+        r.rrule,
+        r.dtstartDate,
+        r.dueTime ?? null,
+        r.calendar,
+        r.reminderTime ?? null,
+        r.createdDate,
+        r.trackStreak ? 1 : 0,
+        r.category ?? null,
+        r.active ? 1 : 0,
+        r.createdAt,
+        r.updatedAt,
+      );
+    }
+
+    const insertVersion = db.prepare(
+      `INSERT INTO rule_versions (id, rule_id, version, rrule, dtstart_date, effective_from, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const v of doc.ruleVersions) {
+      insertVersion.run(v.id, v.ruleId, v.version, v.rrule, v.dtstartDate, v.effectiveFrom, v.createdAt);
+    }
+
+    const insertOcc = db.prepare(
+      `INSERT INTO occurrences
+         (id, rule_id, rule_version, scheduled_date, due_time, status, completed_at, note,
+          reminded_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+    );
+    for (const o of doc.occurrences) {
+      insertOcc.run(
+        o.id,
+        o.ruleId,
+        o.ruleVersion,
+        o.scheduledDate,
+        o.dueTime ?? null,
+        o.status,
+        o.completedAt ?? null,
+        o.note ?? null,
+        o.createdAt ?? ts,
+        o.updatedAt ?? ts,
+      );
+    }
+
+    const insertSkip = db.prepare(
+      'INSERT INTO skip_periods (id, start_date, end_date, reason, created_at) VALUES (?, ?, ?, ?, ?)',
+    );
+    for (const s of doc.skipPeriods) {
+      insertSkip.run(s.id, s.startDate, s.endDate, s.reason ?? null, s.createdAt ?? ts);
+    }
+
+    const insertEx = db.prepare('INSERT INTO exceptions (id, rule_id, date) VALUES (?, ?, ?)');
+    for (const e of doc.exceptions) {
+      insertEx.run(e.id ?? newId(), e.ruleId, e.date);
+    }
+
+    updateSettings(db, doc.settings);
+  });
+
+  run();
+
+  return {
+    rules: doc.rules.length,
+    ruleVersions: doc.ruleVersions.length,
+    occurrences: doc.occurrences.length,
+    skipPeriods: doc.skipPeriods.length,
+    exceptions: doc.exceptions.length,
+  };
+}
+
+/** Ledger rows joined with rule titles, for CSV export. */
+export function readLedgerRows(db: DB, from: string, to: string): LedgerCsvRow[] {
+  return toLedgerCsvRows(
+    readOccurrences(db, from, to),
+    readRules(db, true).map((r) => ({ id: r.id, title: r.title, calendar: r.calendar, category: r.category })),
+  );
 }
 
 // ---------------------------------------------------------------------------

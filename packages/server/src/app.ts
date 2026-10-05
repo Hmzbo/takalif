@@ -7,6 +7,8 @@ import {
   isKnownCalendar,
   isValidDate,
   isValidTime,
+  ledgerToCsv,
+  rulesToVCalendar,
   toHijri,
   todayInTimeZone,
   validateRRule,
@@ -29,12 +31,15 @@ import {
   listSubscriptions,
   materialize,
   previewRuleEdit,
+  readAllForBackup,
+  readLedgerRows,
   readOccurrence,
   readOccurrences,
   readRules,
   readSettings,
   readSkipPeriods,
   resetOccurrence,
+  restoreBackup,
   saveSubscription,
   setOccurrenceStatus,
   updateRule,
@@ -677,6 +682,62 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     const range = resolveRange(body(req.query), plan.today);
     if ('error' in range) return badRequest(reply, range.error);
     return buildPeriodReport(db, range.from, range.to);
+  });
+
+  // -- export / import ------------------------------------------------------
+  // R7: the data outlives the app. JSON is the complete backup (and the one
+  // format that imports back); CSV is the ledger for spreadsheets; VTODO
+  // carries the schedules to any calendar tool.
+
+  app.get('/api/export/json', async (req, reply) => {
+    const plan = sync();
+    const backup = readAllForBackup(db, clock());
+    reply.header('Content-Disposition', `attachment; filename="takalif-backup-${plan.today}.json"`);
+    return backup;
+  });
+
+  app.post('/api/import/json', async (req, reply) => {
+    let counts;
+    try {
+      counts = restoreBackup(db, req.body);
+    } catch (error) {
+      const message = (error as Error).message;
+      // Validated failures carry our own prefix. Anything else is a storage
+      // detail (constraint names, SQL text) and must not reach the client.
+      if (message.startsWith('Invalid backup at')) return badRequest(reply, message);
+      req.log.error({ err: error }, 'backup restore failed');
+      return badRequest(reply, 'Backup could not be restored: it failed database constraints');
+    }
+    sync();
+    return { restored: true, ...counts };
+  });
+
+  app.get('/api/export/csv', async (req, reply) => {
+    const plan = sync();
+    const q = body(req.query);
+    // An export with no range defaults to the trailing year. The complete
+    // ledger is the JSON backup; an unbounded CSV would be a denial of
+    // service on the event loop, hence the same 3660-day cap as reports.
+    if (single(q.from) === undefined && single(q.to) === undefined && single(q.preset) === undefined) {
+      q.preset = 'year';
+    }
+    const range = resolveRange(q, plan.today);
+    if ('error' in range) return badRequest(reply, range.error);
+    const csv = ledgerToCsv(readLedgerRows(db, range.from, range.to));
+    reply.header('Content-Type', 'text/csv; charset=utf-8');
+    reply.header(
+      'Content-Disposition',
+      `attachment; filename="takalif-ledger-${range.from}-${range.to}.csv"`,
+    );
+    return csv;
+  });
+
+  app.get('/api/export/vtodo', async (req, reply) => {
+    sync();
+    const ics = rulesToVCalendar(readRules(db, true), clock());
+    reply.header('Content-Type', 'text/calendar; charset=utf-8');
+    reply.header('Content-Disposition', 'attachment; filename="takalif-rules.ics"');
+    return ics;
   });
 
   // -- health ---------------------------------------------------------------
