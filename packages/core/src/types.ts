@@ -22,6 +22,14 @@ export interface Settings {
   defaultCalendar: CalendarKind;
   /** Optional destination for fallback email reminders. */
   email?: string | null;
+  /**
+   * ntfy topic for reminder fallback, e.g. `takalif-reminders`. Null disables.
+   * ntfy needs no account and no per-device setup, which makes it the fallback
+   * that actually gets used; email stays a listed destination for later.
+   */
+  ntfyTopic?: string | null;
+  /** ntfy server base URL. Null means the public default. */
+  ntfyServer?: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,6 +39,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lookaheadDays: 14,
   defaultCalendar: GREGORIAN,
   email: null,
+  ntfyTopic: null,
+  ntfyServer: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -47,6 +57,12 @@ export interface Rule {
   dtstartDate: LocalDate;
   /** Optional `HH:MM`; when present, lateness becomes derivable. */
   dueTime?: string | null;
+  /**
+   * Optional `HH:MM` at which the server sends a reminder for that day's
+   * occurrence. Null means no reminder. Changing it never opens a new version:
+   * it does not reinterpret anchors, so it is not a schedule change.
+   */
+  reminderTime?: string | null;
   /**
    * The calendar this rule's month and day anchors are interpreted in.
    *

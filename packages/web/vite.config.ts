@@ -6,7 +6,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
+      // injectManifest ignores the `workbox` block: caching lives in src/sw.ts,
+      // which keeps the same contract (precached shell, /api/* always network).
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+      },
       manifest: {
         name: 'Takalif',
         short_name: 'Takalif',
@@ -27,17 +35,8 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
-        // The app shell works offline; the ledger itself lives on the server.
-        // API responses are never cached — a stale ledger is worse than none.
-        navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
-          {
-            urlPattern: /^https?:.*\/api\/.*/i,
-            handler: 'NetworkOnly',
-          },
-        ],
-      },
+      // No `workbox` block: with injectManifest the caching strategy lives in
+      // src/sw.ts (precached shell, /api/* always network).
     }),
   ],
   server: {

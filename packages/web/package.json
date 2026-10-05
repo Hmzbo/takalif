@@ -9,7 +9,7 @@
     "build": "vite build",
     "icons": "node scripts/generate-icons.mjs",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.sw.json"
   },
   "dependencies": {
     "@takalif/core": "workspace:*",
@@ -20,11 +20,15 @@
     "@types/node": "^22.10.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/serviceworker": "^0.0.202",
     "@vitejs/plugin-react": "^4.3.4",
     "sharp": "^0.34.0",
     "typescript": "^5.7.2",
     "vite": "^6.3.0",
     "vite-plugin-pwa": "^1.0.0",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1",
+    "workbox-strategies": "^7.4.1"
   }
 }

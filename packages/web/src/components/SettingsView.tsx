@@ -3,6 +3,13 @@ import type { Settings } from '@takalif/core';
 import { api, ApiError } from '../api';
 import { runMutation } from '../data';
 import { CALENDAR_OPTIONS } from '../format';
+import {
+  pushState,
+  pushSupported,
+  subscribeBrowser,
+  unsubscribeBrowser,
+  type PushState,
+} from '../push';
 import { Banner, Field } from '../ui';
 
 /** Common IANA zones for the datalist. Anything valid also works typed by hand. */
@@ -54,6 +61,13 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
   const [lookaheadDays, setLookaheadDays] = useState('14');
   const [defaultCalendar, setDefaultCalendar] = useState('gregorian');
   const [email, setEmail] = useState('');
+  const [ntfyTopic, setNtfyTopic] = useState('');
+  const [ntfyServer, setNtfyServer] = useState('');
+  const [push, setPush] = useState<PushState | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     let live = true;
@@ -67,11 +81,16 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
         setLookaheadDays(String(s.lookaheadDays));
         setDefaultCalendar(s.defaultCalendar);
         setEmail(s.email ?? '');
+        setNtfyTopic(s.ntfyTopic ?? '');
+        setNtfyServer(s.ntfyServer ?? '');
       },
       (e: unknown) => {
         if (live) setLoadError(e instanceof ApiError ? e : new ApiError(0, String(e)));
       },
     );
+    void pushState().then((state) => {
+      if (live) setPush(state);
+    });
     return () => {
       live = false;
     };
@@ -90,6 +109,8 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
         lookaheadDays: lookaheadDays === '' ? undefined : Number(lookaheadDays),
         defaultCalendar: defaultCalendar as Settings['defaultCalendar'],
         email: email.trim() || null,
+        ntfyTopic: ntfyTopic.trim() || null,
+        ntfyServer: ntfyServer.trim() || null,
       });
       setSettings(updated);
       setFailedRules(updated.failedRules.length);
@@ -101,6 +122,58 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
     }
     setSaved(true);
     onChanged();
+  }
+
+  async function enablePush() {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      const { publicKey } = await api.pushPublicKey();
+      const sub = await subscribeBrowser(publicKey);
+      await api.pushSubscribe(sub);
+      setPush({ kind: 'subscribed', endpoint: sub.endpoint });
+      setPushMessage({ kind: 'info', text: 'This device will now receive reminders.' });
+    } catch (e) {
+      setPushMessage({ kind: 'error', text: e instanceof ApiError ? e.message : String(e) });
+      setPush(await pushState());
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function disablePush() {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      const endpoint = await unsubscribeBrowser();
+      if (endpoint) await api.pushUnsubscribe(endpoint);
+      setPush(await pushState());
+      setPushMessage({ kind: 'info', text: 'This device will no longer receive reminders.' });
+    } catch (e) {
+      setPushMessage({ kind: 'error', text: e instanceof ApiError ? e.message : String(e) });
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function testPush() {
+    setPushBusy(true);
+    setPushMessage(null);
+    const err = await runMutation(async () => {
+      const result = await api.pushTest();
+      if (result.sent === 0) {
+        throw new Error('Nothing was sent: no device subscribed and no ntfy topic set.');
+      }
+      setPushMessage({
+        kind: 'info',
+        text:
+          `Sent ${result.sent} notification${result.sent === 1 ? '' : 's'}` +
+          (result.pruned > 0 ? `, removed ${result.pruned} dead subscription(s)` : '') +
+          '.',
+      });
+    });
+    if (err) setPushMessage({ kind: 'error', text: err.message });
+    setPushBusy(false);
   }
 
   if (loadError) {
@@ -194,6 +267,75 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
             placeholder="you@example.com"
           />
         </Field>
+
+        <Field
+          label="ntfy topic (optional)"
+          hint="Reminder fallback that needs no account: install ntfy on your phone, subscribe to this topic, and reminders arrive there too."
+        >
+          <input
+            type="text"
+            value={ntfyTopic}
+            maxLength={64}
+            onChange={(e) => setNtfyTopic(e.target.value)}
+            placeholder="takalif-reminders"
+          />
+        </Field>
+
+        <Field label="ntfy server (optional)" hint="Empty means the public ntfy.sh. Self-hosters can point at their own.">
+          <input
+            type="text"
+            value={ntfyServer}
+            maxLength={200}
+            onChange={(e) => setNtfyServer(e.target.value)}
+            placeholder="https://ntfy.sh"
+          />
+        </Field>
+
+        <h3 className="section-title">Notifications</h3>
+        {!pushSupported() && (
+          <Banner kind="warn">
+            This browser does not support push notifications. Use ntfy above as the fallback.
+          </Banner>
+        )}
+        {push?.kind === 'denied' && (
+          <Banner kind="warn">
+            Notifications are blocked for this site. Allow them in the browser settings first.
+          </Banner>
+        )}
+        {push?.kind === 'subscribed' ? (
+          <div className="row-between">
+            <span className="muted">This device receives reminders.</span>
+            <span style={{ display: 'flex', gap: '0.4rem' }}>
+              <button type="button" className="btn small" disabled={pushBusy} onClick={testPush}>
+                Send test
+              </button>
+              <button type="button" className="btn small" disabled={pushBusy} onClick={disablePush}>
+                Disable
+              </button>
+            </span>
+          </div>
+        ) : (
+          pushSupported() &&
+          push?.kind !== 'denied' && (
+            <div className="row-between">
+              <span className="muted">Reminders appear only if a channel below delivers them.</span>
+              <span style={{ display: 'flex', gap: '0.4rem' }}>
+                <button type="button" className="btn small" disabled={pushBusy} onClick={testPush}>
+                  Send test
+                </button>
+                <button
+                  type="button"
+                  className="btn small primary"
+                  disabled={pushBusy}
+                  onClick={enablePush}
+                >
+                  Enable on this device
+                </button>
+              </span>
+            </div>
+          )
+        )}
+        {pushMessage && <Banner kind={pushMessage.kind}>{pushMessage.text}</Banner>}
 
         {saveError && <Banner kind="error">{saveError}</Banner>}
         {saved && <Banner kind="info">Saved.</Banner>}

@@ -155,10 +155,12 @@ wall of failures:
 ## 5. Reminders
 
 - Scheduled server-side, so they fire whether or not the client is open.
-- Delivered by Web Push to installed PWAs.
-- Email fallback for the desktop case, where push requires the browser to be
-  running.
-- Optional ntfy destination.
+- Per-rule reminder time. Only today's pending occurrences qualify, and each
+  is reminded at most once.
+- Delivered by Web Push to installed PWAs (needs `VAPID_*` env vars).
+- ntfy fallback: set a topic and reminders arrive there too, with no account
+  and no per-device setup.
+- Email remains a listed destination for a later fallback.
 
 ---
 

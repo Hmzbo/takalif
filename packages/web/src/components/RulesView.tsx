@@ -102,6 +102,7 @@ export function RulesView({ onChanged }: { onChanged: () => void }) {
                 {rule.category && <span>{rule.category}</span>}
                 {rule.trackStreak && <span>streak on</span>}
                 {rule.dueTime && <span>due {rule.dueTime}</span>}
+    {rule.reminderTime && <span>reminds {rule.reminderTime}</span>}
               </div>
               {rule.description && <div className="muted">{rule.description}</div>}
             </div>

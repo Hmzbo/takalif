@@ -11,3 +11,16 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+
+// The service worker is registered explicitly: without this (or the
+// virtual:pwa-register import) nothing ever installs it, and push
+// notifications have nowhere to land.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch((error: unknown) => {
+      // Offline on first load, or a browser that refuses workers (e.g. some
+      // in-app webviews): the app works fine without one.
+      console.warn('service worker registration failed', error);
+    });
+  });
+}
