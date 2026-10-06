@@ -41,6 +41,7 @@ import {
   resetOccurrence,
   restoreBackup,
   saveSubscription,
+  setOccurrenceNote,
   setOccurrenceStatus,
   updateRule,
   updateSettings,
@@ -550,6 +551,22 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     const occ = excuseOccurrence(db, id);
     if (!occ) return notFound(reply, 'Occurrence not found');
     sync();
+    return occ;
+  });
+
+  /**
+   * Set or clear the free-text note on an occurrence (R2.3). Annotation, not
+   * ledger state: writable on any status, and it changes no adherence figure.
+   */
+  app.post('/api/occurrences/:id/note', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const raw = body(req.body);
+    // Absent key is a malformed call, not a clear: clearing is explicit null.
+    if (!('note' in raw)) return badRequest(reply, 'note is required');
+    const note = optionalText(raw.note, 'note');
+    if (!note.ok) return badRequest(reply, note.error);
+    const occ = setOccurrenceNote(db, id, note.value?.trim() ? note.value.trim() : null);
+    if (!occ) return notFound(reply, 'Occurrence not found');
     return occ;
   });
 
