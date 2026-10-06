@@ -1,0 +1,31 @@
+# Self-hosted Takalif: one process serves the API and the PWA, SQLite lives on
+# a volume so the ledger survives image rebuilds.
+#
+# A named volume, not a bind mount: SQLite runs in WAL mode, whose shared
+# memory files need a POSIX filesystem. Bind mounts from Windows/Mac hosts do
+# not provide one (SQLITE_IOERR_SHMOPEN on first boot). The supported way to
+# get data in and out is Settings → Data → JSON backup/restore.
+services:
+  takalif:
+    build: .
+    image: takalif:latest
+    ports:
+      - "8787:8787"
+    volumes:
+      - takalif-data:/data
+    environment:
+      # The server default binds loopback, which accepts only connections from
+      # inside the container. Override it here; the compose file is the place
+      # this is set, not the image, so `docker run` users must pass it too.
+      HOST: 0.0.0.0
+      PORT: 8787
+      DB_FILE: /data/takalif.sqlite
+      # Reminders need one of these channels (see README):
+      # VAPID_PUBLIC_KEY: ...
+      # VAPID_PRIVATE_KEY: ...
+      # VAPID_SUBJECT: mailto:you@example.com
+      # ALLOWED_ORIGINS: ...
+    restart: unless-stopped
+
+volumes:
+  takalif-data:

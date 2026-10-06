@@ -4,9 +4,8 @@ SQLite. `journal_mode = WAL`, `foreign_keys = ON`.
 
 Schema lives in `packages/server/src/schema.sql`.
 
-> **Status note.** The schema below describes the design. Multi-calendar support
-> is designed but not yet implemented; the `rules.calendar` column does not exist
-> in `schema.sql` yet. Everything else matches the current code.
+> **Status note.** Describes the current schema in
+> `packages/server/src/schema.sql`.
 
 ---
 

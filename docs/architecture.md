@@ -42,11 +42,13 @@ Contents:
 | Module | Responsibility |
 |---|---|
 | `dates.ts` | Calendar-date arithmetic and timezone helpers |
+| `calendars.ts` | Gregorian/Hijri conversion over `Intl`, no dependency |
 | `rrule.ts` | The only file that imports an RRULE library |
 | `types.ts` | Domain types and the status model |
 | `generator.ts` | The occurrence planner |
 | `applyPlan.ts` | Pure plan application, used by tests |
 | `stats.ts` | Adherence, streaks, trends, reports |
+| `interop.ts` | Backup validation, CSV ledger, VTODO schedules |
 
 ### `packages/server` — persistence and API
 
@@ -59,6 +61,7 @@ Responsibilities:
 - HTTP API
 - Running the generator before serving anything that touches the ledger
 - Web Push scheduling, which can run without a client open
+- JSON backup/restore and CSV/VTODO export
 
 ### `packages/web` — PWA client
 
@@ -171,13 +174,22 @@ writer. That is one of the reasons the architecture is this simple.
 
 ## 8. Deployment
 
-```
-docker compose up -d
+```bash
+docker compose up -d --build
 ```
 
-or
+The compose file builds the image, maps port 8787, and keeps the ledger in a
+named volume — SQLite WAL mode needs a POSIX filesystem, which Windows/Mac
+bind mounts do not provide. `HOST` must be `0.0.0.0` inside the container — the
+server default binds loopback, which is unreachable from outside — and the
+compose file sets it. See [ADR 0008](adr/0008-container-packaging.md) for the
+image decisions.
+
+or from source:
 
 ```bash
+pnpm install
+pnpm build
 pnpm --filter @takalif/server start
 ```
 

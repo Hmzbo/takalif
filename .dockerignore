@@ -1,0 +1,16 @@
+# `**/` matters: a bare `node_modules` matches only the repository root, and
+# nested workspace symlinks (absolute host paths) would otherwise be copied
+# over the image's own install and break every resolution inside it.
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/data
+.git
+.github
+**/*.sqlite
+**/*.sqlite-shm
+**/*.sqlite-wal
+.env
+.env.local
+**/.vite
