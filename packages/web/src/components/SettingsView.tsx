@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Settings } from '@takalif/core';
+import type { Settings, SkipPeriod } from '@takalif/core';
 import { api, ApiError } from '../api';
 import { runMutation } from '../data';
 import { CALENDAR_OPTIONS } from '../format';
@@ -72,6 +72,15 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
   const [importMessage, setImportMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(
     null,
   );
+  const [periods, setPeriods] = useState<SkipPeriod[] | null>(null);
+  const [skStart, setSkStart] = useState('');
+  const [skEnd, setSkEnd] = useState('');
+  const [skReason, setSkReason] = useState('');
+  const [skipsBusy, setSkipsBusy] = useState(false);
+  const [skipsMessage, setSkipsMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(
+    null,
+  );
+  const [confirmDeleteSkip, setConfirmDeleteSkip] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -95,6 +104,14 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
     void pushState().then((state) => {
       if (live) setPush(state);
     });
+    void api
+      .skipPeriods()
+      .then((p) => {
+        if (live) setPeriods(p);
+      })
+      .catch(() => {
+        if (live) setPeriods([]);
+      });
     return () => {
       live = false;
     };
@@ -200,6 +217,48 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
     });
     if (err) setImportMessage({ kind: 'error', text: err.message });
     setImportBusy(false);
+  }
+
+  async function reloadPeriods() {
+    try {
+      setPeriods(await api.skipPeriods());
+    } catch {
+      setPeriods([]);
+    }
+  }
+
+  async function addSkipPeriod() {
+    if (!skStart) return;
+    setSkipsBusy(true);
+    setSkipsMessage(null);
+    const err = await runMutation(async () => {
+      await api.createSkipPeriod({
+        startDate: skStart,
+        endDate: skEnd || skStart,
+        reason: skReason.trim() || null,
+      });
+      setSkStart('');
+      setSkEnd('');
+      setSkReason('');
+      setSkipsMessage({ kind: 'info', text: 'Added. Days in this range leave your adherence figures.' });
+      await reloadPeriods();
+      onChanged();
+    });
+    if (err) setSkipsMessage({ kind: 'error', text: err.message });
+    setSkipsBusy(false);
+  }
+
+  async function deleteSkipPeriod(id: string) {
+    setSkipsBusy(true);
+    setSkipsMessage(null);
+    const err = await runMutation(async () => {
+      await api.deleteSkipPeriod(id);
+      setConfirmDeleteSkip(null);
+      await reloadPeriods();
+      onChanged();
+    });
+    if (err) setSkipsMessage({ kind: 'error', text: err.message });
+    setSkipsBusy(false);
   }
 
   if (loadError) {
@@ -391,6 +450,91 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
           />
         </Field>
         {importMessage && <Banner kind={importMessage.kind}>{importMessage.text}</Banner>}
+
+        <h3 className="section-title">Time away</h3>
+        <p className="muted">
+          Mark a date range as away — a holiday, illness, anything that should not count
+          against adherence. Days in the range leave the denominator; completing one
+          anyway still counts as a success.
+        </p>
+        {periods !== null && periods.length > 0 && (
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.6rem' }}>
+            {periods.map((p) => (
+              <li key={p.id} className="row-between" style={{ paddingBlock: '0.3rem' }}>
+                <span>
+                  {p.startDate} → {p.endDate}
+                  {p.reason && <span className="muted"> · {p.reason}</span>}
+                </span>
+                {confirmDeleteSkip === p.id ? (
+                  <span style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={skipsBusy}
+                      onClick={() => void deleteSkipPeriod(p.id)}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      className="btn small ghost"
+                      disabled={skipsBusy}
+                      onClick={() => setConfirmDeleteSkip(null)}
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn small ghost"
+                    disabled={skipsBusy}
+                    onClick={() => setConfirmDeleteSkip(p.id)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* A <div>, not a <form>: this section lives inside the settings form
+            and HTML forbids nested forms — a submit button here would save
+            settings instead of adding the range. */}
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'end' }}>
+          <label className="muted">
+            From
+            <input type="date" value={skStart} onChange={(e) => setSkStart(e.target.value)} />
+          </label>
+          <label className="muted">
+            To
+            <input
+              type="date"
+              value={skEnd}
+              min={skStart || undefined}
+              onChange={(e) => setSkEnd(e.target.value)}
+            />
+          </label>
+          <label className="muted" style={{ flexGrow: 1 }}>
+            Reason (optional)
+            <input
+              type="text"
+              value={skReason}
+              maxLength={500}
+              onChange={(e) => setSkReason(e.target.value)}
+              placeholder="Summer holiday"
+            />
+          </label>
+          <button
+            type="button"
+            className="btn small primary"
+            disabled={skipsBusy || !skStart}
+            onClick={() => void addSkipPeriod()}
+          >
+            {skipsBusy ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+        {skipsMessage && <Banner kind={skipsMessage.kind}>{skipsMessage.text}</Banner>}
 
         {saveError && <Banner kind="error">{saveError}</Banner>}
         {saved && <Banner kind="info">Saved.</Banner>}

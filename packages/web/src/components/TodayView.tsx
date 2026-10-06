@@ -123,20 +123,31 @@ export function TodayView({
   );
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [noteId, setNoteId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
 
   const viewing = date ?? day.data?.today ?? '';
   const isToday = !day.data || viewing === day.data.today;
 
-  async function act(id: string, fn: () => Promise<unknown>) {
+  async function act(id: string, fn: () => Promise<unknown>): Promise<boolean> {
     setBusyId(id);
     setActionError(null);
     const err = await runMutation(fn);
     setBusyId(null);
     if (err) {
       setActionError(err.message);
-      return;
+      return false;
     }
     day.refresh();
+    return true;
+  }
+
+  async function saveNote(id: string) {
+    if (await act(id, () => api.setNote(id, noteDraft))) setNoteId(null);
+  }
+
+  async function clearNote(id: string) {
+    if (await act(id, () => api.setNote(id, null))) setNoteId(null);
   }
 
   return (
@@ -221,7 +232,60 @@ export function TodayView({
                 {item.category && <span>{item.category}</span>}
                 {item.dueTime && <span>due {item.dueTime}</span>}
               </div>
-              {item.note && <div className="muted">{item.note}</div>}
+              {item.note && noteId !== item.id && <div className="muted">{item.note}</div>}
+              {noteId === item.id ? (
+                <form
+                  style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void saveNote(item.id);
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={noteDraft}
+                    maxLength={500}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    placeholder="Add a note…"
+                    aria-label="Occurrence note"
+                  />
+                  <button type="submit" className="btn small primary" disabled={busyId === item.id}>
+                    Save
+                  </button>
+                  {item.note && (
+                    <button
+                      type="button"
+                      className="btn small ghost"
+                      disabled={busyId === item.id}
+                      onClick={() => void clearNote(item.id)}
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn small"
+                    disabled={busyId === item.id}
+                    onClick={() => setNoteId(null)}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <div style={{ marginTop: '0.4rem' }}>
+                  <button
+                    type="button"
+                    className="btn small ghost"
+                    disabled={busyId === item.id}
+                    onClick={() => {
+                      setNoteId(item.id);
+                      setNoteDraft(item.note ?? '');
+                    }}
+                  >
+                    {item.note ? 'Edit note' : 'Add note'}
+                  </button>
+                </div>
+              )}
             </div>
             <div className="item-actions">
               {item.status === 'pending' && (

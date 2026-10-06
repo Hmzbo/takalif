@@ -148,6 +148,8 @@ export const api = {
   reset: (id: string) => request<Occurrence>(`/api/occurrences/${id}/reset`, withBody('POST', {})),
   excuse: (id: string) =>
     request<Occurrence>(`/api/occurrences/${id}/excuse`, withBody('POST', {})),
+  setNote: (id: string, note: string | null) =>
+    request<Occurrence>(`/api/occurrences/${id}/note`, withBody('POST', { note })),
   bulkExcuse: (input: { from: string; to: string; ruleIds?: string[] }) =>
     request<{ excused: number }>('/api/occurrences/bulk-excuse', withBody('POST', input)),
 

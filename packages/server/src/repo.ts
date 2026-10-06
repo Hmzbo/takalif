@@ -630,6 +630,25 @@ export function resetOccurrence(db: DB, occurrenceId: string): Occurrence | null
 }
 
 /**
+ * Set or clear the free-text note on an occurrence.
+ *
+ * A note is annotation, not ledger state: it changes neither status nor
+ * adherence, so it is writable on terminal rows too. The generator never
+ * writes notes (COALESCE preserves them); only this explicit user action does.
+ */
+export function setOccurrenceNote(
+  db: DB,
+  occurrenceId: string,
+  note: string | null,
+): Occurrence | null {
+  const result = db
+    .prepare('UPDATE occurrences SET note = ?, updated_at = ? WHERE id = ?')
+    .run(note, nowIso(), occurrenceId);
+  if (result.changes === 0) return null;
+  return readOccurrence(db, occurrenceId);
+}
+
+/**
  * Excuse an occurrence: `skipped`, so it leaves the adherence denominator,
  * whether or not its day has closed. A deliberate user action, which is why it
  * may write a terminal state.

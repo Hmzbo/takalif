@@ -87,6 +87,10 @@ Today · Friday 2 October 2026
 Completed items are visible in place rather than hidden, so the day reads as a
 record rather than a queue that empties.
 
+Each occurrence can carry a short note — "gym instead", "felt strong" — set
+from the day view. Notes are annotation, not ledger state: they change no
+adherence figure and survive every materialisation.
+
 ---
 
 ## 3. Skipping and holidays
@@ -112,6 +116,9 @@ The skipped count is always shown next to the result:
 This is deliberate. Hiding skips would make "skip everything" indistinguishable
 from a perfect month, and a number you cannot trust is worse than a number you
 dislike.
+
+Ranges are managed in Settings → Time away, where they can be added ahead of a
+trip and removed afterwards. Removing a range never rewrites settled rows.
 
 ---
 
