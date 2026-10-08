@@ -5,6 +5,12 @@
 # memory files need a POSIX filesystem. Bind mounts from Windows/Mac hosts do
 # not provide one (SQLITE_IOERR_SHMOPEN on first boot). The supported way to
 # get data in and out is Settings → Data → JSON backup/restore.
+#
+# Pinned project name: the default comes from the checkout directory, so
+# renaming the folder would otherwise rename the container, network and volume
+# out from under the data.
+name: takalif
+
 services:
   takalif:
     build: .
