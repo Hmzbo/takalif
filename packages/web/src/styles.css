@@ -544,6 +544,147 @@ button:focus-visible {
   }
 }
 
+/* -- calendar ---------------------------------------------------------- */
+
+.cal-week {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(11rem, 1fr);
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-block-end: 0.25rem;
+}
+
+.cal-day {
+  margin-block: 0.25rem;
+  min-inline-size: 0;
+}
+
+.cal-dayhead {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  padding: 0;
+  margin-block-end: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.cal-dayhead strong {
+  font-size: 0.95rem;
+}
+
+.cal-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  padding-block: 0.15rem;
+  min-inline-size: 0;
+}
+
+.cal-item .item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-dots {
+  display: inline-flex;
+  gap: 0.2rem;
+  margin-block-start: 0.25rem;
+}
+
+.cal-dot {
+  inline-size: 0.55rem;
+  block-size: 0.55rem;
+  border-radius: 999px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.cal-dot.done {
+  background: var(--ok);
+}
+
+.cal-dot.missed {
+  background: var(--danger);
+}
+
+.cal-dot.skipped {
+  background: var(--warn);
+}
+
+.cal-month {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+}
+
+.cal-dow {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-2);
+  padding-block: 0.25rem;
+}
+
+.cal-cell {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+  min-block-size: 3.4rem;
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.cal-cell.cal-outside {
+  opacity: 0.45;
+}
+
+.cal-cell.cal-today,
+.cal-day.cal-today {
+  border-color: var(--accent);
+}
+
+.cal-num {
+  font-weight: 650;
+  font-size: 0.88rem;
+}
+
+.cal-sub {
+  font-size: 0.68rem;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-inline-size: 100%;
+}
+
+@media (min-width: 52rem) {
+  .cal-week {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(7, 1fr);
+    overflow-x: visible;
+  }
+
+  .cal-cell {
+    min-block-size: 4.5rem;
+  }
+}
+
 /* -- desktop sidebar ------------------------------------------------- */
 /* One nav, two placements: bottom bar below 52rem, fixed left sidebar above.
  * The grid-auto-flow columns on .tabs-inner mean a fifth tab (Calendar) needs
