@@ -47,6 +47,40 @@ function allZones(): string[] {
   return COMMON_ZONES;
 }
 
+/**
+ * Shows how this device reaches the server, and — when opened via loopback —
+ * what a phone on the same network needs instead. The client cannot discover
+ * the PC's LAN address, so it says how to find it rather than guessing.
+ */
+function ConnectionHint() {
+  let origin: string | null = null;
+  let loopback = false;
+  try {
+    origin = window.location.origin;
+    const host = window.location.hostname;
+    loopback = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  } catch {
+    origin = null;
+  }
+  if (!origin) return null;
+  return (
+    <div>
+      <p className="muted" style={{ marginBlock: '0 0.4rem' }}>
+        This device reaches the server at <span className="mono">{origin}</span>.
+      </p>
+      {loopback && (
+        <Banner kind="info">
+          A phone cannot use that address — on the phone, <em>localhost</em> means the
+          phone itself. On the same WiFi, open{' '}
+          <span className="mono">http://&lt;PC-LAN-IP&gt;:8787</span> instead (Windows:{' '}
+          <span className="mono">ipconfig</span> → IPv4), with Windows firewall open on
+          8787.
+        </Banner>
+      )}
+    </div>
+  );
+}
+
 export function SettingsView({ onChanged }: { onChanged: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
@@ -421,6 +455,9 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
           )
         )}
         {pushMessage && <Banner kind={pushMessage.kind}>{pushMessage.text}</Banner>}
+
+        <h3 className="section-title">Connection</h3>
+        <ConnectionHint />
 
         <h3 className="section-title">Data</h3>
         <p className="muted">
