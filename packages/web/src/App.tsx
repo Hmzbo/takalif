@@ -2,15 +2,17 @@ import { useState } from 'react';
 import type { Settings } from '@takalif/core';
 import { api } from './api';
 import { useOnline, useResource, useTheme } from './data';
+import { CalendarView } from './components/CalendarView';
 import { RulesView } from './components/RulesView';
 import { SettingsView } from './components/SettingsView';
 import { StatsView, type ReviewRange } from './components/StatsView';
 import { TodayView } from './components/TodayView';
 
-type Tab = 'today' | 'rules' | 'stats' | 'settings';
+type Tab = 'today' | 'calendar' | 'rules' | 'stats' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'today', label: 'Today', icon: '✓' },
+  { id: 'calendar', label: 'Calendar', icon: '◫' },
   { id: 'rules', label: 'Tasks', icon: '◷' },
   { id: 'stats', label: 'Stats', icon: '▦' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
@@ -22,6 +24,20 @@ const THEMES = [
   { id: 'dark', label: 'Dark' },
 ] as const;
 
+/**
+ * A `?date=YYYY-MM-DD` query param deep-links to that day. Notification taps
+ * use it so a reminder opens on the day it refers to; anything else is
+ * ignored and the view falls back to today.
+ */
+function initialDateParam(): string | null {
+  try {
+    const date = new URLSearchParams(window.location.search).get('date');
+    return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+  } catch {
+    return null;
+  }
+}
+
 export function App() {
   const [tab, setTab] = useState<Tab>('today');
   const online = useOnline();
@@ -32,10 +48,19 @@ export function App() {
   const [reviewRange, setReviewRange] = useState<ReviewRange | null>(null);
   const [reviewNonce, setReviewNonce] = useState(0);
 
+  // The day Today shows. Calendar sets it when jumping to a date; Today owns
+  // paging from there. Lifted here so the date survives tab switches.
+  const [dayDate, setDayDate] = useState<string | null>(initialDateParam);
+
   function reviewRangeAction(from: string, to: string) {
     setReviewRange({ from, to });
     setReviewNonce((n) => n + 1);
     setTab('stats');
+  }
+
+  function openDay(date: string) {
+    setDayDate(date);
+    setTab('today');
   }
 
   return (
@@ -73,7 +98,15 @@ export function App() {
 
       <main className="app">
         {tab === 'today' && (
-          <TodayView settings={settings.data} onReviewRange={reviewRangeAction} />
+          <TodayView
+            settings={settings.data}
+            onReviewRange={reviewRangeAction}
+            date={dayDate}
+            onDateChange={setDayDate}
+          />
+        )}
+        {tab === 'calendar' && (
+          <CalendarView settings={settings.data} onSelectDate={openDay} />
         )}
         {tab === 'rules' && <RulesView onChanged={() => settings.refresh()} />}
         {tab === 'stats' && <StatsView reviewRange={reviewRange} reviewNonce={reviewNonce} />}
