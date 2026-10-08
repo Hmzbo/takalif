@@ -176,7 +176,7 @@ export function RuleForm({
   const [editingSchedule, setEditingSchedule] = useState(false);
 
   return (
-    <form onSubmit={submit} aria-label={rule ? 'Edit rule' : 'New rule'}>
+    <form onSubmit={submit} aria-label={rule ? 'Edit task' : 'New task'}>
       <Field label="Title">
         <input
           type="text"
@@ -303,7 +303,7 @@ export function RuleForm({
         </select>
       </Field>
 
-      <Field label="Starts on" hint="Nothing is ever materialised before the rule was created; backdate deliberately by moving this.">
+      <Field label="Starts on" hint="Nothing is ever materialised before the task was created; backdate deliberately by moving this.">
         <input type="date" value={value.dtstartDate} onChange={(e) => set('dtstartDate', e.target.value)} />
       </Field>
 
@@ -313,7 +313,7 @@ export function RuleForm({
 
       <Field
         label="Remind me at (optional)"
-        hint="The server sends a push notification at this time on days this rule is due. Leave empty for no reminder."
+        hint="The server sends a push notification at this time on days this task is due. Leave empty for no reminder."
       >
         <input
           type="time"
@@ -338,7 +338,7 @@ export function RuleForm({
           checked={value.trackStreak}
           onChange={(e) => set('trackStreak', e.target.checked)}
         />
-        Track a streak for this rule
+        Track a streak for this task
       </label>
 
       {rule && (
@@ -379,7 +379,7 @@ export function RuleForm({
           Cancel
         </button>
         <button type="submit" className="btn primary" disabled={saving}>
-          {saving ? 'Saving…' : rule ? 'Save changes' : 'Create rule'}
+          {saving ? 'Saving…' : rule ? 'Save changes' : 'Create task'}
         </button>
       </div>
     </form>

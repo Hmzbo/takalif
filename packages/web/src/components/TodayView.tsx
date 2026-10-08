@@ -202,10 +202,10 @@ export function TodayView({
       )}
       {day.data?.failedRules?.length ? (
         <Banner kind="warn">
-          {day.data.failedRules.length === 1 ? 'A rule' : `${day.data.failedRules.length} rules`}{' '}
+          {day.data.failedRules.length === 1 ? 'A task' : `${day.data.failedRules.length} tasks`}{' '}
           could not be expanded, so{' '}
           {day.data.failedRules.length === 1 ? 'it is' : 'they are'} generating nothing. Check the
-          rules list.
+          tasks list.
         </Banner>
       ) : null}
       {day.loading && <Skeleton />}
@@ -213,7 +213,7 @@ export function TodayView({
       {day.data && day.data.items.length === 0 && (
         <div className="empty">
           <p>Nothing due{isToday ? ' today' : ' on this day'}.</p>
-          <p className="muted">Enjoy it, or add a rule.</p>
+          <p className="muted">Enjoy it, or add a task.</p>
         </div>
       )}
 

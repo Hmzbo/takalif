@@ -11,7 +11,7 @@ type Tab = 'today' | 'rules' | 'stats' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'today', label: 'Today', icon: '✓' },
-  { id: 'rules', label: 'Rules', icon: '◷' },
+  { id: 'rules', label: 'Tasks', icon: '◷' },
   { id: 'stats', label: 'Stats', icon: '▦' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
