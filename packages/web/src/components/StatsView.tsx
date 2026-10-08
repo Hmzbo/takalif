@@ -152,7 +152,7 @@ export function StatsView({
           <h3 className="section-title">Trend</h3>
           <TrendChart report={report.data} />
 
-          <h3 className="section-title">Rules</h3>
+          <h3 className="section-title">Tasks</h3>
           {report.data.perRule.length === 0 && (
             <div className="empty">
               <p>Nothing elapsed in this range yet.</p>

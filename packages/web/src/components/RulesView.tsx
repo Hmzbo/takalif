@@ -37,8 +37,8 @@ export function RulesView({ onChanged }: { onChanged: () => void }) {
 
   if (editing) {
     return (
-      <section aria-label="Edit rule">
-        <h2>Edit rule</h2>
+      <section aria-label="Edit task">
+        <h2>Edit task</h2>
         <RuleForm
           rule={editing}
           onSaved={saved}
@@ -50,8 +50,8 @@ export function RulesView({ onChanged }: { onChanged: () => void }) {
 
   if (creating) {
     return (
-      <section aria-label="New rule">
-        <h2>New rule</h2>
+      <section aria-label="New task">
+        <h2>New task</h2>
         <RuleForm rule={null} onSaved={saved} onCancel={() => setCreating(false)} />
       </section>
     );
@@ -61,22 +61,25 @@ export function RulesView({ onChanged }: { onChanged: () => void }) {
   const archived = rules.data?.rules.filter((r) => !r.active) ?? [];
 
   return (
-    <section aria-label="Rules">
+    <section aria-label="Recurring tasks">
       <div className="row-between">
-        <h2 style={{ margin: 0 }}>Rules</h2>
+        <h2 style={{ margin: 0 }}>Recurring tasks</h2>
         <button type="button" className="btn primary" onClick={() => setCreating(true)}>
-          New rule
+          New task
         </button>
       </div>
+      <p className="muted" style={{ marginBlock: '0.4rem 0' }}>
+        Repeating commitments. Time away lives under Settings, never as a task.
+      </p>
 
       {rules.error && <ErrorBanner error={rules.error} onRetry={rules.refresh} />}
       {actionError && <Banner kind="error">{actionError}</Banner>}
       {rules.data && rules.data.failedRules.length > 0 && (
         <Banner kind="warn">
           {rules.data.failedRules.length === 1
-            ? 'A rule could not be expanded, so it is generating nothing.'
-            : `${rules.data.failedRules.length} rules could not be expanded, so they are generating nothing.`}{' '}
-          A rule that generates nothing also shrinks its adherence denominator — check the
+            ? 'A task could not be expanded, so it is generating nothing.'
+            : `${rules.data.failedRules.length} tasks could not be expanded, so they are generating nothing.`}{' '}
+          A task that generates nothing also shrinks its adherence denominator — check the
           schedule below.
         </Banner>
       )}
@@ -84,7 +87,7 @@ export function RulesView({ onChanged }: { onChanged: () => void }) {
 
       {rules.data && active.length === 0 && (
         <div className="empty">
-          <p>No rules yet.</p>
+          <p>No recurring tasks yet.</p>
           <p className="muted">Create your first recurring commitment above.</p>
         </div>
       )}

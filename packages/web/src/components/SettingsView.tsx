@@ -211,7 +211,7 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
       const result = await api.importBackup(doc);
       setImportMessage({
         kind: 'info',
-        text: `Restored ${result.rules} rule(s) and ${result.occurrences} occurrence(s).`,
+        text: `Restored ${result.rules} task(s) and ${result.occurrences} occurrence(s).`,
       });
       onChanged();
     });
@@ -284,8 +284,8 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
       <h2>Settings</h2>
       {failedRules > 0 && (
         <Banner kind="warn">
-          {failedRules === 1 ? 'A rule' : `${failedRules} rules`} could not be expanded after
-          this change. A rule that generates nothing also shrinks its adherence denominator.
+          {failedRules === 1 ? 'A task' : `${failedRules} tasks`} could not be expanded after
+          this change. A task that generates nothing also shrinks its adherence denominator.
         </Banner>
       )}
       <form onSubmit={save}>
@@ -313,7 +313,7 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
 
         <Field
           label="Default calendar"
-          hint="Display preference and the default for new rules. Rules may each use any calendar."
+          hint="Display preference and the default for new tasks. Tasks may each use any calendar."
         >
           <select value={defaultCalendar} onChange={(e) => setDefaultCalendar(e.target.value)}>
             {CALENDAR_OPTIONS.map((o) => (
@@ -440,7 +440,7 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
         </div>
         <Field
           label="Restore from backup"
-          hint="Replaces rules, history and settings with the backup file. This device's push subscription stays as it is. This cannot be undone."
+          hint="Replaces tasks, history and settings with the backup file. This device's push subscription stays as it is. This cannot be undone."
         >
           <input
             type="file"
