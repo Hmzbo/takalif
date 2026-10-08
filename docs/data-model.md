@@ -131,9 +131,11 @@ string.
 | `missed` | Expected, not completed, past its close time | **no** |
 | `skipped` | Deliberately set aside | **no** |
 
-`pending` is the only mutable state. The three terminal states are frozen — the
-generator never rewrites them. The single exception is an explicit user-initiated
-reset, which is the only way out of a terminal state.
+`pending` is the only state the generator may change. The three terminal
+states are frozen against every automatic rewrite. Explicit user actions may
+reassign an occurrence between statuses — but only while its day is still
+open (before the rollover). Once the day has closed the rows are locked; the
+single designed exit is excusing a `missed` day.
 
 Two transitions are worth calling out:
 

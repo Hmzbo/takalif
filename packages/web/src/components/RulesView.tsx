@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Rule } from '@takalif/core';
 import { api } from '../api';
 import { runMutation, useResource, type Resource } from '../data';
@@ -7,7 +7,14 @@ import { describeRRule } from '../rrulePresets';
 import { Banner, ErrorBanner, Skeleton } from '../ui';
 import { RuleForm } from './RuleForm';
 
-export function RulesView({ onChanged }: { onChanged: () => void }) {
+export function RulesView({
+  onChanged,
+  createRequest = 0,
+}: {
+  onChanged: () => void;
+  /** Bumped to open the create form from another tab. */
+  createRequest?: number;
+}) {
   const rules: Resource<Awaited<ReturnType<typeof api.rules>>> = useResource('rules', () =>
     api.rules(),
   );
@@ -15,6 +22,16 @@ export function RulesView({ onChanged }: { onChanged: () => void }) {
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<string | null>(null);
+  // Only reacts to increases: the nonce survives every later mount of this
+  // view, so "greater than last handled" is what actually means "new request".
+  const lastHandled = useRef(0);
+
+  useEffect(() => {
+    if (createRequest > lastHandled.current) {
+      lastHandled.current = createRequest;
+      setCreating(true);
+    }
+  }, [createRequest]);
 
   async function archive(id: string) {
     setActionError(null);
