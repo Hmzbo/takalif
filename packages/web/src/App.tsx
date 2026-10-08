@@ -81,13 +81,19 @@ export function App() {
       </main>
 
       <nav className="tabs" aria-label="Sections">
+        <div className="sidebar-brand" aria-hidden="true">
+          <span className="brand-mark" aria-hidden="true">
+            ✓
+          </span>
+          Takalif
+        </div>
         <div className="tabs-inner">
           {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
               className="tab"
-              aria-selected={tab === t.id}
+              aria-current={tab === t.id ? 'page' : undefined}
               onClick={() => setTab(t.id)}
             >
               <span className="tab-icon" aria-hidden="true">
