@@ -30,8 +30,8 @@ collapses into "was the September box green?"
 
 Takalif keeps the two things separate:
 
-- **The rule** — real recurrence, RFC 5545 RRULE. Every second Tuesday, the 1st
-  of the month, weekdays only, the last Friday.
+- **The schedule** — real recurrence. Every second Tuesday, the 1st of the
+  month, weekdays only, the last Friday.
 - **The ledger** — every *expected* occurrence, recorded, kept for years.
 
 Because the expected set is real data rather than a guess reconstructed from what
@@ -40,24 +40,23 @@ you happened to log, the statistics are actually correct.
 ### And editing a schedule does not rewrite your history
 
 Loosen "Workout" from daily to three times a week, and your past adherence stays
-exactly where it was. Schedules are versioned; settled rows keep pointing at the
-version that produced them.
+exactly where it was. Schedules are versioned; settled entries keep pointing at
+the version that produced them.
 
 This is not a detail most apps get right — it is structurally impossible for
 them to get right, because their data model cannot express it.
 
 ---
 
-## Features
+## What you get
 
-- **Real recurrence.** Full RRULE support: `BYDAY`, `BYSETPOS`, `INTERVAL`,
-  `BYMONTHDAY`, `EXDATE`. Month-end handled correctly — "the 31st" is skipped in
-  February, not silently clamped to the 28th.
-- **Adherence over time.** Weekly, monthly, quarterly, yearly. Failures are
-  always shown; they are never the headline.
+- **Today, Calendar, Stats.** Check off what's due, browse the week or month
+  and jump to any day, and watch adherence over trailing weeks, months and years.
+- **Real recurrence.** Every second Tuesday, the 31st (skipped in February, never
+  clamped), weekdays only, Hijri-month anchors.
 - **Honest holidays.** Mark a date range as away. Those days leave the
   denominator — but if you train anyway, it still counts as a success.
-- **Streaks, if you want them.** Opt-in per rule, off by default.
+- **Streaks, if you want them.** Opt-in per task, off by default.
 - **No backlog graveyard.** Come back after three weeks and you get a prompt
   offering to mark the gap missed or skipped, rather than a wall of silent
   failures.
@@ -65,9 +64,11 @@ them to get right, because their data model cannot express it.
   4:00 AM), so a task done at 11 PM is not a failure.
 - **Timezone-correct.** Your timezone is stored server-side, so your phone and
   your laptop always agree on what "today" is.
-- **PWA.** One codebase, installs on Android, Windows and Linux, works offline.
-- **Export your data.** JSON and CSV, plus CalDAV `VTODO` interoperability, so
-  your history outlives this app.
+- **Notes on any day.** A line of context that never touches the figures.
+- **Phone and desktop.** Installable app on Android, tabs on the phone and a
+  sidebar on a wide screen.
+- **Export your data.** JSON backup and restore, CSV ledger, CalDAV `VTODO`
+  schedules — your history outlives this app.
 
 ---
 
@@ -78,7 +79,7 @@ them to get right, because their data model cannot express it.
 ```bash
 git clone https://github.com/Hmzbo/takalif.git
 cd takalif
-docker compose up -d
+docker compose up -d --build
 ```
 
 Open <http://localhost:8787>. The ledger lives in a named volume and survives
@@ -97,16 +98,32 @@ pnpm --filter @takalif/server start
 The database is a single SQLite file. There is nothing else to configure, and no
 account to create.
 
-### Using it on your phone
+---
+
+## Using it on your phone
 
 Open the server's URL in Chrome and choose **Install app** (or **Add to Home
 screen**). It appears in your app drawer and launches fullscreen with no browser
 chrome. On desktop, Chrome and Edge both offer **Install this site as an app**,
 which adds a Start Menu entry.
 
-For access from your phone while on the same network, set `HOST=0.0.0.0` and
-reach the machine by LAN address. For access from anywhere, put it behind Tailscale
-or any reverse proxy you already trust.
+### Reaching it from your phone on the same network
+
+Use `http://<your-PCs-LAN-address>:8787` — `localhost` on the phone means the
+phone itself. The compose setup already listens on all interfaces; from source,
+start with `HOST=0.0.0.0`.
+
+### If the site can't be reached
+
+1. Phone and PC on the **same WiFi** (no guest network, no VPN on either side).
+2. Find the PC's LAN address (`ipconfig` on Windows, look for IPv4) and open
+   `http://THAT-IP:8787` from the PC first. If the PC can't open it either, the
+   server isn't up.
+3. **Windows firewall** must allow inbound TCP on 8787. The first `docker compose
+   up` usually prompts; if you missed it, add the rule by hand.
+4. For access from anywhere (not just home), put it behind Tailscale or any
+   reverse proxy you already trust — and put authentication in front, since the
+   server itself has none.
 
 ---
 
@@ -117,12 +134,13 @@ Everything is optional; the defaults work.
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `8787` | HTTP port |
-| `HOST` | `127.0.0.1` | Bind address. Set `0.0.0.0` to expose on your network |
-| `DB_FILE` | `./data/takalif.sqlite` | SQLite database location |
+| `HOST` | `127.0.0.1` (`0.0.0.0` in compose) | Bind address. Loopback is unreachable from other machines |
+| `DB_FILE` | `./data/takalif.sqlite` (`/data/takalif.sqlite` in compose) | SQLite database location |
 | `WEB_DIST` | `./packages/web/dist` | Built PWA to serve, when present |
 | `VAPID_PUBLIC_KEY` | — | Web-push public key. Without both keys, push stays disabled |
 | `VAPID_PRIVATE_KEY` | — | Web-push private key. Generate a pair, keep this secret |
 | `VAPID_SUBJECT` | `mailto:takalif@localhost` | Contact URN attached to push requests |
+| `ALLOWED_ORIGINS` | — | Extra browser origins allowed to call the API |
 
 The server is single-user by design: no accounts, no user table. If you expose it
 beyond your own machine, put it behind a reverse proxy that handles
@@ -132,7 +150,7 @@ authentication.
 
 ## Reminders
 
-Set a reminder time on any rule and the server notifies you on days it is due.
+Set a reminder time on any task and the server notifies you on days it is due.
 The check runs once a minute, server-side, so it works whether or not any
 client is open. Each occurrence is reminded at most once.
 
@@ -167,7 +185,7 @@ adherence = done / (done + missed)
 - **Pending days are excluded**, so an unfinished day never counts against you.
 - With nothing elapsed, adherence is reported as `—`, never `0%`.
 
-Streaks, when enabled for a rule: `done` extends the run, `missed` breaks it,
+Streaks, when enabled for a task: `done` extends the run, `missed` breaks it,
 `skipped` is neutral, and pending days are not yet terminal.
 
 ---
@@ -175,10 +193,9 @@ Streaks, when enabled for a rule: `done` extends the run, `missed` breaks it,
 ## Project status
 
 Usable and in active development. Shipped: the domain core (ledger, generator,
-statistics), the HTTP API with SQLite persistence, the PWA (today view, rules,
-stats, settings), server-side reminders (web push with ntfy fallback), and
-export/backup (JSON restore, CSV ledger, VTODO schedules). `docker compose up`
-is the supported install.
+statistics), the HTTP API with SQLite persistence, the PWA (today, calendar,
+tasks, stats, settings), server-side reminders (web push with ntfy fallback),
+export/backup (JSON restore, CSV ledger, VTODO schedules), and Docker packaging.
 
 Still ahead: releases and versioning, multi-arch images, and wider platform
 testing.
@@ -206,64 +223,12 @@ model, and the reasoning behind each decision:
 
 ## Contributing
 
-Contributions are genuinely welcome, including from people who have never
-contributed to an open source project before. Issues describing a recurrence
-edge case you hit, or a way the statistics confused you, are as valuable as
-patches.
+Contributions are welcome, including recurrence edge cases and confusing
+statistics — those reports are as valuable as patches.
 
-**Read [`Agents.md`](Agents.md) first.** It covers the architecture, the domain
-invariants that protect your data, and the git workflow. The
-[architecture decision records](docs/adr/index.md) explain why the design is what
-it is.
-
-### Git workflow, in short
-
-`main` is protected. Never commit or push to it directly.
-
-```bash
-git checkout main && git pull --ff-only
-git checkout -b fix/core/some-descriptive-name
-# ... work, test, commit ...
-git push -u origin fix/core/some-descriptive-name
-```
-
-Then open a pull request targeting `main`. Branch names are
-`<type>/<description>`, where type is `feat`, `fix`, `refactor`, `test`,
-`docs`, `build`, `ci` or `chore`. Namespace with the package when the change is
-scoped to one, e.g. `fix/server/occurrence-reset`.
-
-Commits follow Conventional Commits: `fix(core): freeze skipped occurrences`.
-
-### Running the tests
-
-```bash
-pnpm install
-pnpm test
-pnpm typecheck
-```
-
-### What helps most right now
-
-- **Recurrence edge cases.** If you find a schedule the app gets wrong — a
-  daylight-saving boundary, a month-end, an unusual `BYDAY`/`BYSETPOS` combo —
-  that is a genuinely valuable bug report.
-- **Portability.** Running the Docker image on Linux or ARM, or from source on
-  macOS. Windows/x64 is the only platform exercised so far.
-- **Backup round-trips.** Export the JSON backup, restore it somewhere fresh,
-  and report anything that does not survive.
-- **Accessibility and mobile layout** of the web client.
-
-### What will not be accepted
-
-Takalif is deliberately narrow, and keeping it narrow is what makes it
-useful:
-
-- One-off tasks, meetings, or calendar events. This is not a calendar.
-- Quota-style schedules like "3x per week". The ledger models *schedules*.
-- Streaks or gamification by default. Adherence is the headline metric.
-- Changes that let anything rewrite a settled historical occurrence.
-
-If you want to build one of those, please do — but as a separate project.
+**Read [`Agents.md`](Agents.md) first**, then `pnpm test` and `pnpm typecheck`
+before opening a PR against `main`. Out of scope by design: one-off tasks,
+meetings, quotas, default streaks, and anything rewriting settled history.
 
 ---
 
