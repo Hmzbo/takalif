@@ -15,3 +15,13 @@ data/
 # Local working document: the roadmap for the maintainer. Not project
 # documentation, so it is deliberately not tracked.
 Plan.md
+
+# Tauri desktop: assembled per-platform payload (stock Node runtime, ~85 MB)
+# and Rust build output. Rebuilt via fetch-sidecar / tauri build.
+packages/desktop/sidecar-build/
+packages/desktop/src-tauri/binaries/
+packages/desktop/src-tauri/target/
+packages/desktop/src-tauri/gen/
+
+# Agent review reports: process artifacts, not project documentation.
+review-reports/
