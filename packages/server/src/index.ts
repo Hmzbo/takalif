@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
+import { isLoopback, loadOrCreateToken, tokenFilePath } from './auth.js';
 import { openDatabase } from './db.js';
 import { pushConfigured, runReminderTick } from './reminders.js';
 
@@ -16,6 +17,11 @@ const WEB_DIST = process.env.WEB_DIST ?? join(root, 'packages', 'web', 'dist');
 mkdirSync(dirname(DB_FILE), { recursive: true });
 
 const db = openDatabase(DB_FILE);
+
+// LAN pairing token: loopback callers never need it, but the moment the bind
+// opens to the LAN every /api route (except /health) demands it as a bearer
+// token. File-persisted next to the database so pairing survives restarts.
+const authToken = loadOrCreateToken(dirname(DB_FILE), process.env.TAKALIF_TOKEN);
 
 const pushConfig = {
   publicKey: process.env.VAPID_PUBLIC_KEY || undefined,
@@ -32,6 +38,7 @@ const app = buildApp(db, {
     .filter(Boolean),
   logger: process.env.LOG !== 'off',
   push: pushConfig,
+  auth: { token: authToken },
 });
 
 if (existsSync(join(WEB_DIST, 'index.html'))) {
@@ -60,6 +67,11 @@ await app.listen({ port: PORT, host: HOST });
 
 console.log(`Takalif server listening on http://${HOST}:${PORT}`);
 console.log(`  database: ${DB_FILE}`);
+if (HOST !== 'localhost' && !isLoopback(HOST)) {
+  // Deliberately printed: a headless LAN server is otherwise unpairable, and
+  // the token file is root-readable on a single-user machine anyway.
+  console.log(`  LAN API auth on; pairing token: ${authToken} (${tokenFilePath(dirname(DB_FILE))})`);
+}
 if (existsSync(WEB_DIST)) console.log(`  web:      ${WEB_DIST}`);
 if (pushConfigured(pushConfig)) {
   console.log('  reminders: web push enabled');
