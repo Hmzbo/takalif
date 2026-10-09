@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
 import { openDatabase } from './db.js';
 import { pushConfigured, runReminderTick } from './reminders.js';
+import { restoreBackup } from './repo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..', '..');
@@ -16,6 +17,36 @@ const WEB_DIST = process.env.WEB_DIST ?? join(root, 'packages', 'web', 'dist');
 mkdirSync(dirname(DB_FILE), { recursive: true });
 
 const db = openDatabase(DB_FILE);
+
+/**
+ * Optional one-time seed (demo mode). Opt-in via SEED_FILE; strictly guarded:
+ * it only ever touches an empty database (no rules and no occurrences), so it
+ * cannot overwrite real data no matter how it is misconfigured. A bad file
+ * fails the boot loudly rather than starting an empty-looking app.
+ */
+const SEED_FILE = process.env.SEED_FILE;
+if (SEED_FILE) {
+  if (!existsSync(SEED_FILE)) {
+    console.error(`SEED_FILE points at a missing file: ${SEED_FILE}`);
+    process.exit(1);
+  }
+  const isEmpty =
+    (db.prepare('SELECT COUNT(*) AS n FROM rules').get() as { n: number }).n === 0 &&
+    (db.prepare('SELECT COUNT(*) AS n FROM occurrences').get() as { n: number }).n === 0;
+  if (isEmpty) {
+    try {
+      const counts = restoreBackup(db, JSON.parse(readFileSync(SEED_FILE, 'utf8')));
+      console.log(
+        `seeded database from ${SEED_FILE} (${counts.rules} rules, ${counts.occurrences} occurrences)`,
+      );
+    } catch (error) {
+      console.error(`SEED_FILE ${SEED_FILE} is not a valid backup document:`, error);
+      process.exit(1);
+    }
+  } else {
+    console.log('SEED_FILE set but the database already has data — leaving it alone');
+  }
+}
 
 const pushConfig = {
   publicKey: process.env.VAPID_PUBLIC_KEY || undefined,

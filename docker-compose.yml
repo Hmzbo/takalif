@@ -31,6 +31,10 @@ services:
       # VAPID_PRIVATE_KEY: ...
       # VAPID_SUBJECT: mailto:you@example.com
       # ALLOWED_ORIGINS: ...
+      # Demo mode: mount a backup JSON and point SEED_FILE at it. Only fills
+      # an empty database; never overwrites real data.
+      #   volumes: ./data/demo-ledger.json:/data/demo-ledger.json:ro
+      #   SEED_FILE: /data/demo-ledger.json
     restart: unless-stopped
 
 volumes:

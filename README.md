@@ -112,14 +112,21 @@ the app under **Settings → Data → Restore from backup** and every screen
 
 **Restore replaces everything on the server.** Do this on a scratch instance
 if you have real data — or export a backup of your own first and keep it safe.
-To explore without touching your instance at all:
+To explore without touching your instance at all, seed a scratch container on
+boot (the seed only ever fills an **empty** database — it cannot overwrite
+real data):
 
 ```bash
-docker run -d --name takalif-demo -p 8788:8787 -e HOST=0.0.0.0 takalif:latest
+docker run -d --name takalif-demo -p 8788:8787 -e HOST=0.0.0.0 \
+  -e SEED_FILE=/data/demo-ledger.json \
+  -v ./data/demo-ledger.json:/data/demo-ledger.json:ro \
+  takalif:latest
 ```
 
-then open <http://localhost:8788> and import there. Remove it with
-`docker rm -f takalif-demo`.
+then open <http://localhost:8788> — the screens come up already populated,
+no import needed. Remove it with `docker rm -f takalif-demo` (and
+`docker volume prune` if you want the demo data gone too). On PowerShell,
+replace `./data/...` with `${PWD}/data/...` in the volume flag.
 
 ---
 
