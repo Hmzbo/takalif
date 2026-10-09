@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, type DayItem } from '../api';
 import { runMutation, useResource, type Resource } from '../data';
 import { calendarLabel, formatCalendarDate, formatDayLabel, shiftDate } from '../format';
+import { IconPlus } from '../icons';
 import { Banner, ErrorBanner, Skeleton } from '../ui';
 import type { Settings } from '@takalif/core';
 
@@ -145,8 +146,8 @@ export function TodayView({
     <section aria-label="Today">
       <div className="row-between" style={{ marginBlockStart: '0.75rem' }}>
         <h2 style={{ margin: 0 }}>Today</h2>
-        <button type="button" className="btn primary" onClick={onNewTask}>
-          New task
+        <button type="button" className="btn primary new-pill" onClick={onNewTask}>
+          <IconPlus /> New task
         </button>
       </div>
       <div className="day-nav">
@@ -219,8 +220,8 @@ export function TodayView({
         // are locked, except the one deliberate exit — excusing a missed day.
         const dayElapsed = viewing !== '' && viewing < (day.data?.today ?? '');
         return (
-          <article className="card" key={item.id} style={{ marginBlock: '0.5rem' }}>
-            <div className="item" style={{ borderBlockEnd: 0, paddingBlock: 0 }}>
+          <article className="card" key={item.id}>
+            <div className="item item-plain">
               <div className="item-main">
                 <div className={`item-title${item.status === 'done' ? ' done' : ''}`}>
                   {item.ruleTitle}
@@ -235,7 +236,7 @@ export function TodayView({
                 {item.note && noteId !== item.id && <div className="muted">{item.note}</div>}
                 {noteId === item.id ? (
                   <form
-                    style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}
+                    className="note-form"
                     onSubmit={(e) => {
                       e.preventDefault();
                       void saveNote(item.id);
@@ -276,7 +277,7 @@ export function TodayView({
                     </button>
                   </form>
                 ) : (
-                  <div style={{ marginTop: '0.4rem' }}>
+                  <div className="note-toggle">
                     <button
                       type="button"
                       className="btn small ghost"

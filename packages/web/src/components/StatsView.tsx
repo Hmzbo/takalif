@@ -121,6 +121,7 @@ export function StatsView({
         <>
           <article className="card" aria-label="Overall adherence">
             <div
+              className="stat-hero"
               style={{
                 fontSize: '2.4rem',
                 fontWeight: 800,
