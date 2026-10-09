@@ -18,7 +18,8 @@ import {
   type Settings,
 } from '@takalif/core';
 import type { DB } from './db.js';
-import { bearerToken, isLoopback, lanIPv4 } from './auth.js';
+import { bearerToken, isLoopback, lanIPv4, pickPairingInterfaces } from './auth.js';
+import { networkInterfaces } from 'node:os';
 import {
   archiveRule,
   buildPeriodReport,
@@ -813,7 +814,10 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
       reply.code(403).send({ error: 'Pairing details are only available on this machine' });
       return;
     }
-    return { lanIP: lanIPv4(), token: authToken };
+    // One snapshot for both fields: two enumerations could straddle a NIC
+    // flap and disagree about which address is first.
+    const nics = pickPairingInterfaces(networkInterfaces());
+    return { lanIP: nics[0]?.address ?? null, interfaces: nics, token: authToken };
   });
 
   /**

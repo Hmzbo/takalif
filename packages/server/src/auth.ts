@@ -66,12 +66,52 @@ export function loadOrCreateToken(dbDir: string, envToken?: string): string {
 
 /** First non-internal IPv4, for the pairing screen's LAN URL. Null if none. */
 export function lanIPv4(): string | null {
-  for (const addrs of Object.values(networkInterfaces())) {
+  return pickPairingInterfaces(networkInterfaces())[0]?.address ?? null;
+}
+
+/** Every usable IPv4 with its interface name, RFC 1918 (likely the phone's
+ *  WiFi) first. Multi-homed machines — Tailscale beside Ethernet, as here —
+ *  otherwise hand the companion whichever address enumeration hits first. */
+export interface LanInterface {
+  name: string;
+  address: string;
+}
+
+/** Minimal shape pickPairingInterfaces reads; real NIC records satisfy it. */
+export interface NicInfo {
+  family: string;
+  internal: boolean;
+  address: string;
+}
+
+export function pickPairingInterfaces(all: NodeJS.Dict<NicInfo[]>): LanInterface[] {
+  const found: LanInterface[] = [];
+  for (const [name, addrs] of Object.entries(all)) {
     for (const a of addrs ?? []) {
-      if (a.family === 'IPv4' && !a.internal) return a.address;
+      // '4' is the pre-18 numeric family; engines here are 22+, kept for safety.
+      if (a.family !== 'IPv4' && a.family !== '4') continue;
+      if (a.internal) continue;
+      found.push({ name, address: a.address });
     }
   }
-  return null;
+  const rfc1918 = (ip: string) =>
+    ip.startsWith('192.168.') ||
+    ip.startsWith('10.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+  // Virtual switches (Hyper-V, Docker, Tailscale tunnels) hand out perfectly
+  // valid RFC 1918 addresses a phone can never reach. They stay selectable —
+  // the tailnet path is real when the phone is on it — but rank below a NIC
+  // that looks like actual hardware.
+  const virtualNic = (name: string) =>
+    /virtual|vethernet|\bwsl\b|hyper-?v|docker|vbox|virtualbox|vmware|vmnet|tailscale|\btun\b|\btap\b/i.test(
+      name,
+    );
+  const physicalNic = (name: string) =>
+    /ethernet|eth\d|\bwi-?fi\b|wlan|^en\d|^eno|^ens|^enp|^wlp/i.test(name) &&
+    !virtualNic(name);
+  const score = (nic: LanInterface) =>
+    (rfc1918(nic.address) ? 2 : 0) + (physicalNic(nic.name) ? 1 : 0) - (virtualNic(nic.name) ? 2 : 0);
+  return found.sort((a, b) => score(b) - score(a));
 }
 
 /** `Authorization: Bearer <token>`, or null when absent/malformed. */
