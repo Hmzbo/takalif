@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, type DayItem } from '../api';
 import { runMutation, useResource, type Resource } from '../data';
 import { calendarLabel, formatCalendarDate, formatDayLabel, shiftDate } from '../format';
+import { IconPlus } from '../icons';
 import { Banner, ErrorBanner, Skeleton } from '../ui';
 import type { Settings } from '@takalif/core';
 
@@ -145,8 +146,8 @@ export function TodayView({
     <section aria-label="Today">
       <div className="row-between" style={{ marginBlockStart: '0.75rem' }}>
         <h2 style={{ margin: 0 }}>Today</h2>
-        <button type="button" className="btn primary" onClick={onNewTask}>
-          New task
+        <button type="button" className="btn primary new-pill" onClick={onNewTask}>
+          <IconPlus /> New task
         </button>
       </div>
       <div className="day-nav">

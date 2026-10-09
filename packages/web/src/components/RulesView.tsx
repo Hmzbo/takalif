@@ -4,6 +4,7 @@ import { api } from '../api';
 import { runMutation, useResource, type Resource } from '../data';
 import { calendarLabel } from '../format';
 import { describeRRule } from '../rrulePresets';
+import { IconArchive, IconCalendar, IconDots, IconPencil, IconPlus } from '../icons';
 import { Banner, ErrorBanner, Skeleton } from '../ui';
 import { RuleForm } from './RuleForm';
 
@@ -79,15 +80,19 @@ export function RulesView({
 
   return (
     <section aria-label="Recurring tasks">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Recurring tasks</h2>
-        <button type="button" className="btn primary" onClick={() => setCreating(true)}>
-          New task
+      <div className="page-head">
+        <div>
+          <h2 className="page-title">
+            Recurring <span className="accent-text">tasks</span>
+          </h2>
+          <p className="page-sub">
+            Repeating commitments. Time away lives under Settings, never as a task.
+          </p>
+        </div>
+        <button type="button" className="btn primary new-pill" onClick={() => setCreating(true)}>
+          <IconPlus /> New task
         </button>
       </div>
-      <p className="muted" style={{ marginBlock: '0.4rem 0' }}>
-        Repeating commitments. Time away lives under Settings, never as a task.
-      </p>
 
       {rules.error && <ErrorBanner error={rules.error} onRetry={rules.refresh} />}
       {actionError && <Banner kind="error">{actionError}</Banner>}
@@ -105,61 +110,23 @@ export function RulesView({
       {rules.data && active.length === 0 && (
         <div className="empty">
           <p>No recurring tasks yet.</p>
-          <p className="muted">Create your first recurring commitment above.</p>
+          <p className="muted">Tap New task to create your first commitment.</p>
         </div>
       )}
 
-      {active.map((rule) => (
-        <article className="card" key={rule.id} style={{ marginBlock: '0.5rem' }}>
-          <div className="item" style={{ borderBlockEnd: 0, paddingBlock: 0 }}>
-            <div className="item-main">
-              <div className="item-title">{rule.title}</div>
-              <div className="item-meta">
-                <span>{describeRRule(rule.rrule)}</span>
-                {rule.calendar !== 'gregorian' && (
-                  <span className="pill hijri">{calendarLabel(rule.calendar)}</span>
-                )}
-                {rule.category && <span>{rule.category}</span>}
-                {rule.trackStreak && <span>streak on</span>}
-                {rule.dueTime && <span>due {rule.dueTime}</span>}
-    {rule.reminderTime && <span>reminds {rule.reminderTime}</span>}
-              </div>
-              {rule.description && <div className="muted">{rule.description}</div>}
-            </div>
-            <div className="item-actions">
-              <button type="button" className="btn small" onClick={() => setEditing(rule)}>
-                Edit
-              </button>
-              {confirmArchive === rule.id ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn small danger"
-                    onClick={() => archive(rule.id)}
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    type="button"
-                    className="btn small ghost"
-                    onClick={() => setConfirmArchive(null)}
-                  >
-                    Keep
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="btn small danger"
-                  onClick={() => setConfirmArchive(rule.id)}
-                >
-                  Archive
-                </button>
-              )}
-            </div>
-          </div>
-        </article>
-      ))}
+      <div className="task-list">
+        {active.map((rule) => (
+          <TaskCard
+            key={rule.id}
+            rule={rule}
+            onEdit={() => setEditing(rule)}
+            onArchive={() => archive(rule.id)}
+            confirming={confirmArchive === rule.id}
+            onConfirm={() => setConfirmArchive(rule.id)}
+            onCancelConfirm={() => setConfirmArchive(null)}
+          />
+        ))}
+      </div>
 
       {archived.length > 0 && (
         <>
@@ -177,5 +144,97 @@ export function RulesView({
         </>
       )}
     </section>
+  );
+}
+
+/** One commitment card: ring, title, schedule, actions, kebab menu. */
+function TaskCard({
+  rule,
+  onEdit,
+  onArchive,
+  confirming,
+  onConfirm,
+  onCancelConfirm,
+}: {
+  rule: Rule;
+  onEdit: () => void;
+  onArchive: () => void;
+  confirming: boolean;
+  onConfirm: () => void;
+  onCancelConfirm: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const closeMenu = () => setMenuOpen(false);
+  const editFromMenu = () => {
+    closeMenu();
+    onEdit();
+  };
+  const archiveFromMenu = () => {
+    closeMenu();
+    onConfirm();
+  };
+
+  return (
+    <article className="card task-card">
+      <span className="task-ring" aria-hidden="true" />
+      <div className="task-main">
+        <div className="task-title">{rule.title}</div>
+        <div className="task-sched">
+          <IconCalendar />
+          <span>{describeRRule(rule.rrule)}</span>
+          {rule.calendar !== 'gregorian' && (
+            <span className="pill hijri">{calendarLabel(rule.calendar)}</span>
+          )}
+        </div>
+        {(rule.category || rule.trackStreak || rule.dueTime || rule.reminderTime) && (
+          <div className="item-meta">
+            {rule.category && <span>{rule.category}</span>}
+            {rule.trackStreak && <span>streak on</span>}
+            {rule.dueTime && <span>due {rule.dueTime}</span>}
+            {rule.reminderTime && <span>reminds {rule.reminderTime}</span>}
+          </div>
+        )}
+        {rule.description && <div className="task-desc">{rule.description}</div>}
+        <div className="task-actions">
+          {confirming ? (
+            <>
+              <button type="button" className="btn-pill danger" onClick={onArchive}>
+                <IconArchive /> Confirm archive
+              </button>
+              <button type="button" className="btn-pill" onClick={onCancelConfirm}>
+                Keep
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn-pill" onClick={onEdit}>
+                <IconPencil /> Edit
+              </button>
+              <button type="button" className="btn-pill danger" onClick={onConfirm}>
+                <IconArchive /> Archive
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+      <details
+        className="kebab"
+        open={menuOpen}
+        onToggle={(e) => setMenuOpen((e.target as HTMLDetailsElement).open)}
+      >
+        <summary aria-label="More actions">
+          <IconDots />
+        </summary>
+        <div className="kebab-menu" role="menu">
+          <button type="button" role="menuitem" onClick={editFromMenu}>
+            <IconPencil /> Edit
+          </button>
+          <button type="button" role="menuitem" className="danger" onClick={archiveFromMenu}>
+            <IconArchive /> Archive
+          </button>
+        </div>
+      </details>
+    </article>
   );
 }

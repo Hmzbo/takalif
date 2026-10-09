@@ -2,6 +2,16 @@ import { useState } from 'react';
 import type { Settings } from '@takalif/core';
 import { api } from './api';
 import { useOnline, useResource, useTheme } from './data';
+import {
+  IconCalendar,
+  IconCheck,
+  IconClock,
+  IconGear,
+  IconGrid,
+  IconMoon,
+  IconSun,
+  IconSunDim,
+} from './icons';
 import { CalendarView } from './components/CalendarView';
 import { RulesView } from './components/RulesView';
 import { SettingsView } from './components/SettingsView';
@@ -10,18 +20,18 @@ import { TodayView } from './components/TodayView';
 
 type Tab = 'today' | 'calendar' | 'rules' | 'stats' | 'settings';
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'today', label: 'Today', icon: '✓' },
-  { id: 'calendar', label: 'Calendar', icon: '◫' },
-  { id: 'rules', label: 'Tasks', icon: '◷' },
-  { id: 'stats', label: 'Stats', icon: '▦' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
+const TABS: { id: Tab; label: string; icon: typeof IconCheck }[] = [
+  { id: 'today', label: 'Today', icon: IconCheck },
+  { id: 'calendar', label: 'Calendar', icon: IconCalendar },
+  { id: 'rules', label: 'Tasks', icon: IconClock },
+  { id: 'stats', label: 'Stats', icon: IconGrid },
+  { id: 'settings', label: 'Settings', icon: IconGear },
 ];
 
 const THEMES = [
-  { id: 'system', label: 'System', icon: '◐' },
-  { id: 'light', label: 'Light', icon: '☀' },
-  { id: 'dark', label: 'Dark', icon: '☾' },
+  { id: 'system', label: 'System theme', icon: IconSunDim },
+  { id: 'light', label: 'Light theme', icon: IconSun },
+  { id: 'dark', label: 'Dark theme', icon: IconMoon },
 ] as const;
 
 /**
@@ -92,11 +102,11 @@ export function App() {
                 type="button"
                 className="seg-btn"
                 aria-pressed={theme === t.id}
+                aria-label={t.label}
                 title={t.label}
                 onClick={() => setTheme(t.id as typeof theme)}
               >
-                <span aria-hidden="true">{t.icon}</span>
-                <span className="visually-hidden">{t.label}</span>
+                <t.icon />
               </button>
             ))}
           </div>
@@ -140,7 +150,7 @@ export function App() {
               onClick={() => setTab(t.id)}
             >
               <span className="tab-icon" aria-hidden="true">
-                {t.icon}
+                <t.icon />
               </span>
               {t.label}
             </button>
