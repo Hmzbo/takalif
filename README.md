@@ -98,6 +98,29 @@ pnpm --filter @takalif/server start
 The database is a single SQLite file. There is nothing else to configure, and no
 account to create.
 
+### Try it with sample data
+
+```bash
+pnpm --filter @takalif/server seed
+```
+
+writes `data/demo-ledger.json` — about three months of plausible history:
+seven rules (daily, weekdays, monthly, one Hijri, one archived), streaks,
+notes, and a week away that leaves the adherence denominator. Import it in
+the app under **Settings → Data → Restore from backup** and every screen
+(Today, Calendar, Stats) has something to show.
+
+**Restore replaces everything on the server.** Do this on a scratch instance
+if you have real data — or export a backup of your own first and keep it safe.
+To explore without touching your instance at all:
+
+```bash
+docker run -d --name takalif-demo -p 8788:8787 -e HOST=0.0.0.0 takalif:latest
+```
+
+then open <http://localhost:8788> and import there. Remove it with
+`docker rm -f takalif-demo`.
+
 ---
 
 ## Using it on your phone
