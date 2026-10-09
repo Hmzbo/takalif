@@ -645,7 +645,7 @@ body {
 .empty {
   text-align: center;
   color: var(--text-2);
-  padding-block: 2.5rem 2rem;
+  padding-block: 2rem 1.75rem;
 }
 
 /* -- buttons & forms ------------------------------------------------- */
@@ -903,6 +903,13 @@ summary:focus-visible {
   padding-block: 0.35rem;
 }
 
+/* Inside the sticky header the bar rides along instead of competing for the
+ * top offset — two stickies at inset-block-start 0 used to overlap. */
+.app-header .offline-bar {
+  position: static;
+  border-block-end: 1px solid var(--border);
+}
+
 .skeleton {
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -1079,10 +1086,6 @@ summary:focus-visible {
     display: grid;
     grid-template-columns: 15rem 1fr;
     grid-template-rows: auto 1fr;
-  }
-
-  .offline-bar {
-    grid-column: 1 / -1;
   }
 
   .app-header {

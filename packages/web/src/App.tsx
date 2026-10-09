@@ -82,12 +82,12 @@ export function App() {
 
   return (
     <>
-      {!online && (
-        <div className="offline-bar" role="status">
-          You are offline. Showing what was last fetched — changes will fail until you reconnect.
-        </div>
-      )}
       <header className="app-header">
+        {!online && (
+          <div className="offline-bar" role="status">
+            You are offline. Showing what was last fetched — changes will fail until you reconnect.
+          </div>
+        )}
         <div className="app-header-inner">
           <span className="brand">
             <span className="brand-mark" aria-hidden="true">
