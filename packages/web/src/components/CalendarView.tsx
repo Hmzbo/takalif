@@ -10,7 +10,7 @@ type Mode = 'week' | 'month';
 
 const MODE_KEY = 'takalif-calendar-mode';
 const MAX_SHOWN = 4; // week list rows before "+n more"
-const MAX_DOTS = 5; // month-cell dots; the title/aria-label always carries full counts
+const MAX_DOTS = 4; // month-cell dots; the title/aria-label always carries full counts
 // Any known Monday: weekday header labels must start Monday to match the grid.
 const KNOWN_MONDAY = '2026-10-05';
 const MONTH_NAMES = [
