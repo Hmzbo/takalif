@@ -124,9 +124,8 @@ docker run -d --name takalif-demo -p 8788:8787 -e HOST=0.0.0.0 \
 ```
 
 then open <http://localhost:8788> — the screens come up already populated,
-no import needed. Remove it with `docker rm -f takalif-demo` (and
-`docker volume prune` if you want the demo data gone too). On PowerShell,
-replace `./data/...` with `${PWD}/data/...` in the volume flag.
+no import needed. Remove it with `docker rm -f takalif-demo`. The volume
+path expands as `${PWD}` in PowerShell and `%CD%` in cmd.
 
 ---
 
