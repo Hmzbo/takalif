@@ -89,12 +89,36 @@ const reminderTimer = setInterval(() => {
   void reminderTick();
 }, REMINDER_INTERVAL_MS);
 
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    clearInterval(reminderTimer);
-    void app.close().then(() => {
-      db.close();
+let exiting = false;
+/** Stop serving, checkpoint the database, and leave. First caller wins. */
+function gracefulExit(): void {
+  if (exiting) return;
+  exiting = true;
+  clearInterval(reminderTimer);
+  void app
+    .close()
+    .catch(() => undefined)
+    .then(() => {
+      try {
+        db.close();
+      } catch {
+        // Already closed by a racing path; exit anyway.
+      }
       process.exit(0);
     });
-  });
+}
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, gracefulExit);
+}
+
+// Opt-in orphan guard for launcher shells (Tauri sidecar sets it): when the
+// parent dies without asking us to stop, our stdin closes. A force-quit shell
+// would otherwise orphan the server holding the port, and the next launch
+// would find its port taken by a stale process. Normal runs (Docker, dev)
+// never set the flag and are unaffected.
+if (process.env.TAKALIF_STDIN_EXIT === '1') {
+  process.stdin.resume();
+  process.stdin.on('end', gracefulExit);
+  process.stdin.on('close', gracefulExit);
 }
