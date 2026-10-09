@@ -18,6 +18,7 @@ import {
   type Settings,
 } from '@takalif/core';
 import type { DB } from './db.js';
+import { bearerToken, isLoopback, lanIPv4 } from './auth.js';
 import {
   archiveRule,
   buildPeriodReport,
@@ -105,12 +106,24 @@ export interface BuildAppOptions {
    * than accepting subscriptions that can never fire.
    */
   push?: PushConfig;
+  /**
+   * LAN pairing token. Loopback callers never need it — only this machine can
+   * reach loopback. Non-loopback callers must present it as a bearer token on
+   * every /api route except /api/health, because opening the bind to the LAN
+   * would otherwise expose the whole ledger to the Wi-Fi.
+   */
+  auth?: { token: string };
 }
 
 export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance {
+  if (options.auth && !options.auth.token) {
+    // An explicitly empty token would silently disable enforcement.
+    throw new Error('auth.token must be a non-empty string');
+  }
   const app = Fastify({ logger: options.logger ?? true });
   const allowedOrigins = new Set(options.allowedOrigins ?? []);
   const clock = options.now ?? wallClock;
+  const authToken = options.auth?.token;
 
   /**
    * Same-origin requests send no `Origin` header at all (curl, the bundled PWA
@@ -789,12 +802,48 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
   }));
 
   /**
+   * LAN pairing details for the QR screen: this machine's LAN address plus
+   * the bearer token a companion needs. Loopback-only — answering this on
+   * the LAN would hand the keys to anyone listening. 400 when no token is
+   * configured, since there is nothing to pair with.
+   */
+  app.get('/api/pairing', async (req, reply) => {
+    if (!authToken) return badRequest(reply, 'LAN pairing is not enabled on this server');
+    if (!isLoopback(req.ip)) {
+      reply.code(403).send({ error: 'Pairing details are only available on this machine' });
+      return;
+    }
+    return { lanIP: lanIPv4(), token: authToken };
+  });
+
+  /**
    * Refuse any request that declares a cross-origin browser context we did not
    * allow. This is the actual access boundary: `origin: false` in the CORS
    * config only strips the response headers, and a script can still *send* the
    * request and act on a simple-response side effect.
+   *
+   * Second boundary in the same hook: when an auth token is configured,
+   * non-loopback callers must present it on every API route except
+   * /api/health. Loopback stays open — the desktop shell, curl, and the test
+   * harness all speak from this machine.
    */
   app.addHook('onRequest', async (request, reply) => {
+    // LAN token boundary first: it applies regardless of Origin, because a
+    // non-browser client (curl, a script, another device) sends none at all.
+    // Matched on the path, not the raw URL, so a query string on an exempt
+    // route cannot flip the decision.
+    const pathname = request.url.split('?')[0] ?? '';
+    if (
+      authToken &&
+      pathname.startsWith('/api/') &&
+      pathname !== '/api/health' &&
+      !isLoopback(request.ip) &&
+      bearerToken(request.headers.authorization) !== authToken
+    ) {
+      reply.code(401).send({ error: 'Authentication required' });
+      return;
+    }
+
     const origin = request.headers.origin;
     if (origin === undefined || allowedOrigins.has(origin)) return;
 
