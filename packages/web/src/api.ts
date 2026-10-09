@@ -178,6 +178,11 @@ export const api = {
       withBody('POST', {}),
     ),
 
+  pairing: () =>
+    request<{ lanIP: string | null; interfaces: { name: string; address: string }[]; token: string }>(
+      '/api/pairing',
+    ),
+
   exportUrls: {
     backupJson: '/api/export/json',
     ledgerCsv: '/api/export/csv',

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import type { Settings, SkipPeriod } from '@takalif/core';
 import { api, ApiError } from '../api';
-import { runMutation, useTheme } from '../data';
+import { runMutation, useResource, useTheme } from '../data';
+import { buildPairingPayload, pairingUrl } from '../pairing';
 import { CALENDAR_OPTIONS } from '../format';
 import {
   pushState,
@@ -10,7 +12,7 @@ import {
   unsubscribeBrowser,
   type PushState,
 } from '../push';
-import { Banner, Field } from '../ui';
+import { Banner, Field, Skeleton } from '../ui';
 
 /** Common IANA zones for the datalist. Anything valid also works typed by hand. */
 const COMMON_ZONES = [
@@ -84,6 +86,133 @@ function ConnectionHint() {
           8787.
         </Banner>
       )}
+    </div>
+  );
+}
+
+/**
+ * QR pairing for a companion device. Reads the loopback-only pairing
+ * endpoint, so this screen only works on the server machine itself — opened
+ * from a phone it explains that instead. The QR encodes the versioned
+ * payload the companion parses; URL and token are also shown as text for
+ * manual entry.
+ */
+function PairDevice() {
+  const pairing = useResource('pairing', () => api.pairing());
+  const [copied, setCopied] = useState<string | null>(null);
+  const [nic, setNic] = useState<string | null>(null);
+
+  if (pairing.loading) return <Skeleton />;
+  if (pairing.error || !pairing.data) {
+    const status = pairing.error?.status;
+    return (
+      <Banner kind={status === 403 ? 'info' : 'error'}>
+        {status === 403 ? (
+          <>
+            Pairing codes are created here, on this machine — open Settings on
+            the computer running the server and scan from there.
+          </>
+        ) : (
+          <>
+            Pairing is unavailable
+            {pairing.error ? `: ${pairing.error.message}` : ''}.
+          </>
+        )}
+      </Banner>
+    );
+  }
+
+  const nics = pairing.data.interfaces ?? [];
+  // Server ranks RFC 1918 first; the choice sticks only for this view.
+  const active = nics.find((n) => n.address === nic) ?? nics[0] ?? null;
+  if (!active) {
+    return (
+      <Banner kind="warn">
+        No LAN address detected on the server — pairing needs a network the
+        phone can reach. Check the machine is on WiFi or Ethernet, then retry.
+      </Banner>
+    );
+  }
+
+  let code: string;
+  let url: string;
+  let token: string;
+  try {
+    // The browser's own port: empty on 80/443 (reverse proxy), present
+    // otherwise. Never invent a default — a wrong port is a dead QR.
+    url = pairingUrl(active.address, window.location.port || '').replace(/\/$/, '');
+    if (!url) throw new Error('unreachable');
+    token = pairing.data.token.trim();
+    if (!token) throw new Error('empty token');
+    // Validate through the contract so the QR holds exactly what parses.
+    code = buildPairingPayload(url, token);
+  } catch (e) {
+    return <Banner kind="error">{e instanceof Error ? e.message : String(e)}</Banner>;
+  }
+
+  async function copy(which: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
+    } catch {
+      // Clipboard denied (permissions, insecure context): the text stays
+      // selectable, so nothing is lost.
+    }
+  }
+
+  const copyRow = (which: string, label: string, text: string) => (
+    <div className="row-between" style={{ paddingBlock: '0.25rem' }}>
+      <span>
+        <span className="muted">{label} </span>
+        <span className="mono">{text}</span>
+      </span>
+      <button type="button" className="btn small" onClick={() => void copy(which, text)}>
+        {copied === which ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  );
+
+  return (
+    <div>
+      <p className="muted" style={{ marginBlock: '0 0.6rem' }}>
+        On the same WiFi, point the companion app's camera at the code. Anyone
+        holding it can read and rewrite everything — treat it like a password.
+        To rotate it, delete the <span className="mono">takalif.token</span> file
+        next to the database and restart the server.
+      </p>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'start' }}>
+        <div style={{ color: 'var(--text)', background: '#fff', padding: '0.6rem', borderRadius: '0.6rem' }}>
+          <QRCodeSVG
+            value={code}
+            size={192}
+            level="H"
+            marginSize={1}
+            role="img"
+            aria-label={`Pairing code for ${url}`}
+          />
+        </div>
+        <div style={{ flex: '1 1 14rem', minInlineSize: 0 }}>
+          {nics.length > 1 && (
+            <label className="muted" style={{ display: 'block', marginBlockEnd: '0.4rem' }}>
+              Network
+              <select
+                value={active.address}
+                onChange={(e) => setNic(e.target.value)}
+                style={{ marginBlockStart: '0.25rem' }}
+              >
+                {nics.map((n) => (
+                  <option key={`${n.name}/${n.address}`} value={n.address}>
+                    {n.name} · {n.address}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {copyRow('url', 'Server', url)}
+          {copyRow('token', 'Token', token)}
+        </div>
+      </div>
     </div>
   );
 }
@@ -485,6 +614,9 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
 
         <h3 className="section-title">Connection</h3>
         <ConnectionHint />
+
+        <h3 className="section-title">Pair a device</h3>
+        <PairDevice />
 
         <h3 className="section-title">Data</h3>
         <p className="muted">
