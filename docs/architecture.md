@@ -67,6 +67,14 @@ Responsibilities:
 
 React + Vite. A browser cache over the server, never a source of truth.
 
+### `packages/desktop` — Tauri shell, sidecar server
+
+A double-clickable Windows app around the same two bundles: the window loads
+the sidecar-served PWA over loopback, so everything stays same-origin and no
+web code changes. The sidecar is a stock Node runtime plus the server bundle
+and the native closure, assembled per platform; data lives in `%APPDATA%`,
+never the repo.
+
 ---
 
 ## 3. Source of truth
@@ -88,6 +96,11 @@ A direct consequence: **clearing browser site data wipes only the local cache.**
 The server holds the canonical copy. Offline means cached reads plus a write
 outbox, not full offline-first operation — which is the right call for a
 statistics application that needs a canonical view.
+
+API access from off the machine additionally requires the pairing bearer
+token (`TAKALIF_TOKEN` or the persisted sidecar file); loopback callers never
+need it, and `/api/health` stays open for managers and probes. The pairing
+endpoint itself answers loopback callers only.
 
 ---
 
@@ -174,6 +187,8 @@ writer. That is one of the reasons the architecture is this simple.
 
 ## 8. Deployment
 
+### Docker
+
 ```bash
 docker compose up -d --build
 ```
@@ -198,3 +213,17 @@ no separate frontend host, no reverse proxy requirement, and no external
 database.
 
 Configuration is environment variables only; see the [README](../README.md#configuration).
+
+### Desktop app (Windows)
+
+```bash
+pnpm build
+pnpm --filter @takalif/desktop fetch-sidecar
+pnpm --filter @takalif/desktop bundle
+```
+
+produces NSIS and MSI installers. The Tauri window loads the sidecar-served
+PWA over loopback, so the webview is same-origin and no web code changes;
+the sidecar is a stock Node runtime plus the server bundle and its native
+closure, with data in `%APPDATA%`. See `packages/desktop/README.md` for the
+layout and the dev loop.
