@@ -25,7 +25,7 @@
   --danger: #b3261e;
   --danger-soft: #f9dcd8;
   --ok: #0e7c5b;
-  --radius: 12px;
+  --radius: 1.15rem;
   --radius-sm: 8px;
   --shadow: 0 1px 2px rgb(20 30 25 / 0.06), 0 4px 16px rgb(20 30 25 / 0.06);
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
@@ -204,9 +204,10 @@ body {
 
 /* -- cards & lists --------------------------------------------------- */
 
-/* Section headings inside views (Today, Stats, Settings, form pages). */
+/* Section headings inside views (Today, Stats, Settings, form pages).
+ * One step below .page-title (1.9rem): page titles introduce, these label. */
 .app h2 {
-  font-size: 1.55rem;
+  font-size: 1.4rem;
   font-weight: 750;
   letter-spacing: -0.02em;
 }
@@ -214,7 +215,7 @@ body {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 1.15rem;
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 1.05rem 1.15rem;
   margin-block: 0.65rem;
@@ -261,7 +262,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-block: 1rem 0.75rem;
+  margin-block: 0.5rem 0.75rem;
 }
 
 .day-title {
@@ -285,12 +286,15 @@ body {
   gap: 0.75rem;
   padding-block: 1rem;
   border-block-end: 1px solid var(--border);
-}.item:last-child {
+}
+
+.item:last-child {
   border-block-end: 0;
   padding-block-end: 0.25rem;
 }
 
-.item-main {  flex: 1;
+.item-main {
+  flex: 1;
   min-inline-size: 0;
 }
 
@@ -384,7 +388,7 @@ body {
 
 .task-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   flex-wrap: wrap;
   margin-block-start: 0.3rem;
 }
@@ -429,8 +433,8 @@ body {
 .kebab summary {
   list-style: none;
   cursor: pointer;
-  inline-size: 2.2rem;
-  block-size: 2.2rem;
+  inline-size: 2rem;
+  block-size: 2rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -552,7 +556,7 @@ body {
  * status is filled; others are one tap away while the day is open. */
 .status-chips {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.4rem;
   flex-wrap: wrap;
 }
 
@@ -727,7 +731,7 @@ button,
 }
 
 .field .hint {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--text-2);
   margin-block-start: 0.2rem;
 }
@@ -757,7 +761,8 @@ textarea {
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
-button:focus-visible {
+button:focus-visible,
+summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1040,7 +1045,7 @@ button:focus-visible {
 }
 
 .cal-sub {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
