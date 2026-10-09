@@ -19,9 +19,9 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 ];
 
 const THEMES = [
-  { id: 'system', label: 'System' },
-  { id: 'light', label: 'Light' },
-  { id: 'dark', label: 'Dark' },
+  { id: 'system', label: 'System', icon: '◐' },
+  { id: 'light', label: 'Light', icon: '☀' },
+  { id: 'dark', label: 'Dark', icon: '☾' },
 ] as const;
 
 /**
@@ -51,6 +51,8 @@ export function App() {
   // The day Today shows. Calendar sets it when jumping to a date; Today owns
   // paging from there. Lifted here so the date survives tab switches.
   const [dayDate, setDayDate] = useState<string | null>(initialDateParam);
+  // Bumped when Today's "New task" is tapped: Tasks opens straight into the form.
+  const [createRequest, setCreateRequest] = useState(0);
 
   function reviewRangeAction(from: string, to: string) {
     setReviewRange({ from, to });
@@ -61,6 +63,11 @@ export function App() {
   function openDay(date: string) {
     setDayDate(date);
     setTab('today');
+  }
+
+  function startCreateTask() {
+    setCreateRequest((n) => n + 1);
+    setTab('rules');
   }
 
   return (
@@ -78,21 +85,21 @@ export function App() {
             </span>
             Takalif
           </span>
-          <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            Theme
-            <select
-              aria-label="Theme"
-              value={theme}
-              onChange={(e) => setTheme(e.target.value as typeof theme)}
-              style={{ inlineSize: 'auto' }}
-            >
-              {THEMES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="seg" role="group" aria-label="Theme">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className="seg-btn"
+                aria-pressed={theme === t.id}
+                title={t.label}
+                onClick={() => setTheme(t.id as typeof theme)}
+              >
+                <span aria-hidden="true">{t.icon}</span>
+                <span className="visually-hidden">{t.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -103,12 +110,15 @@ export function App() {
             onReviewRange={reviewRangeAction}
             date={dayDate}
             onDateChange={setDayDate}
+            onNewTask={startCreateTask}
           />
         )}
         {tab === 'calendar' && (
           <CalendarView settings={settings.data} onSelectDate={openDay} />
         )}
-        {tab === 'rules' && <RulesView onChanged={() => settings.refresh()} />}
+        {tab === 'rules' && (
+          <RulesView onChanged={() => settings.refresh()} createRequest={createRequest} />
+        )}
         {tab === 'stats' && <StatsView reviewRange={reviewRange} reviewNonce={reviewNonce} />}
         {tab === 'settings' && <SettingsView onChanged={() => settings.refresh()} />}
       </main>

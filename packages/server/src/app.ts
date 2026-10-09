@@ -22,6 +22,7 @@ import {
   archiveRule,
   buildPeriodReport,
   bulkExcuseOccurrences,
+  changeOccurrenceStatus,
   createRule,
   createSkipPeriod,
   deleteSubscription,
@@ -552,6 +553,29 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     if (!occ) return notFound(reply, 'Occurrence not found');
     sync();
     return occ;
+  });
+
+  /**
+   * Reassign an occurrence's status while its day is still open (R2.4's
+   * exception in spirit: a mis-click is an explicit user action). Once the day
+   * has closed the ledger is frozen — `excuse` stays the one deliberate exit.
+   */
+  app.post('/api/occurrences/:id/status', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const status = body(req.body).status;
+    if (status !== 'done' && status !== 'missed' && status !== 'skipped') {
+      return badRequest(reply, 'status must be done, missed or skipped');
+    }
+
+    const result = changeOccurrenceStatus(db, id, status, readSettings(db), clock());
+    if (result.ok) {
+      sync();
+      return result.occurrence;
+    }
+    if (result.reason === 'elapsed') {
+      return conflict(reply, 'This day has already closed; its status is locked');
+    }
+    return notFound(reply, 'Occurrence not found');
   });
 
   /**

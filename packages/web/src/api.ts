@@ -138,14 +138,8 @@ export const api = {
     request<DayItem[]>(
       `/api/occurrences?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     ),
-  markDone: (id: string, at?: string) =>
-    request<Occurrence>(
-      `/api/occurrences/${id}/done`,
-      withBody('POST', at ? { at } : {}),
-    ),
-  markMissed: (id: string) =>
-    request<Occurrence>(`/api/occurrences/${id}/missed`, withBody('POST', {})),
-  reset: (id: string) => request<Occurrence>(`/api/occurrences/${id}/reset`, withBody('POST', {})),
+  reset: (id: string) => request<Occurrence>(`/api/occurrences/${id}/reset`, withBody('POST', {})),  changeStatus: (id: string, status: 'done' | 'missed' | 'skipped') =>
+    request<Occurrence>(`/api/occurrences/${id}/status`, withBody('POST', { status })),
   excuse: (id: string) =>
     request<Occurrence>(`/api/occurrences/${id}/excuse`, withBody('POST', {})),
   setNote: (id: string, note: string | null) =>

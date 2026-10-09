@@ -191,7 +191,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 1rem;
+  padding: 1.1rem;
   margin-block: 0.75rem;
 }
 
@@ -201,7 +201,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-2);
-  margin-block: 1.25rem 0.5rem;
+  margin-block: 1.75rem 0.65rem;
 }
 
 .day-nav {
@@ -209,7 +209,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-block: 0.75rem;
+  margin-block: 1rem 0.75rem;
 }
 
 .day-title {
@@ -231,13 +231,13 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding-block: 0.8rem;
+  padding-block: 1rem;
   border-block-end: 1px solid var(--border);
 }
 
 .item:last-child {
   border-block-end: 0;
-  padding-block-end: 0.2rem;
+  padding-block-end: 0.25rem;
 }
 
 .item-main {
@@ -267,6 +267,8 @@ body {
 .item-actions {
   display: flex;
   gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   flex-shrink: 0;
 }
 
@@ -302,6 +304,93 @@ body {
 
 .pill.hijri {
   border-style: dashed;
+}
+
+/* Status chips: the item's status row itself is the control. The current
+ * status is filled; others are one tap away while the day is open. */
+.status-chips {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  border-radius: 999px;
+  padding-inline: 0.75rem;
+  padding-block: 0.4rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+  min-block-size: 2.1rem;
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chip.current.done,
+.chip.done:not(:disabled):hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--ok);
+}
+
+.chip.current.missed {
+  background: var(--danger-soft);
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.chip.current.skipped {
+  background: var(--warn-soft);
+  border-color: transparent;
+  color: var(--warn);
+}
+
+/* Segmented theme control in the header. */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.seg-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+  padding-inline: 0.8rem;
+  padding-block: 0.45rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.seg-btn + .seg-btn {
+  border-inline-start: 1px solid var(--border);
+}
+
+.seg-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .empty {
@@ -359,9 +448,11 @@ button,
 }
 
 .btn.icon {
-  padding-inline: 0.5rem;
-  padding-block: 0.3rem;
+  padding-inline: 0.6rem;
+  padding-block: 0.5rem;
   line-height: 1;
+  min-inline-size: 2.4rem;
+  min-block-size: 2.4rem;
 }
 
 .field {
@@ -764,5 +855,32 @@ button:focus-visible {
     font-size: 1.15rem;
     letter-spacing: -0.01em;
     padding: 0.25rem 0.8rem 1rem;
+  }
+}
+
+/* Narrow phones: cards breathe less so one-column lists stay scannable.
+ * Sits at the end deliberately — equal specificity, so source order makes
+ * these the winners over the component styles above. */
+@media (max-width: 30rem) {
+  .app {
+    padding-block-end: 6rem;
+  }
+
+  .card {
+    padding: 0.9rem;
+  }
+
+  .item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+
+  .item-actions {
+    justify-content: flex-start;
+  }
+
+  .chip {
+    flex: 1 1 auto;
   }
 }

@@ -100,11 +100,13 @@ export function TodayView({
   onReviewRange,
   date,
   onDateChange,
+  onNewTask,
 }: {
   settings: Settings | null;
   onReviewRange: (from: string, to: string) => void;
   date: string | null;
   onDateChange: (date: string | null) => void;
+  onNewTask: () => void;
 }) {
   const day: Resource<Awaited<ReturnType<typeof api.day>>> = useResource(
     `day:${date ?? 'today'}`,
@@ -141,6 +143,12 @@ export function TodayView({
 
   return (
     <section aria-label="Today">
+      <div className="row-between" style={{ marginBlockStart: '0.75rem' }}>
+        <h2 style={{ margin: 0 }}>Today</h2>
+        <button type="button" className="btn primary" onClick={onNewTask}>
+          New task
+        </button>
+      </div>
       <div className="day-nav">
         <button
           type="button"
@@ -206,121 +214,127 @@ export function TodayView({
         </div>
       )}
 
-      {day.data?.items.map((item) => (
-        <article className="card" key={item.id} style={{ marginBlock: '0.5rem' }}>
-          <div className="item" style={{ borderBlockEnd: 0, paddingBlock: 0 }}>
-            <div className="item-main">
-              <div className={`item-title${item.status === 'done' ? ' done' : ''}`}>
-                {item.ruleTitle}
-              </div>
-              <div className="item-meta">
-                <span className={`pill ${item.status}`}>{STATUS_LABEL[item.status]}</span>
-                {item.ruleCalendar !== 'gregorian' && (
-                  <span className="pill hijri">{calendarLabel(item.ruleCalendar)}</span>
-                )}
-                {item.category && <span>{item.category}</span>}
-                {item.dueTime && <span>due {item.dueTime}</span>}
-              </div>
-              {item.note && noteId !== item.id && <div className="muted">{item.note}</div>}
-              {noteId === item.id ? (
-                <form
-                  style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void saveNote(item.id);
-                  }}
-                >
-                  <input
-                    type="text"
-                    value={noteDraft}
-                    maxLength={500}
-                    onChange={(e) => setNoteDraft(e.target.value)}
-                    placeholder="Add a note…"
-                    aria-label="Occurrence note"
-                  />
-                  <button type="submit" className="btn small primary" disabled={busyId === item.id}>
-                    Save
-                  </button>
-                  {item.note && (
+      {day.data?.items.map((item) => {
+        // The view date being in the past means its day has closed: statuses
+        // are locked, except the one deliberate exit — excusing a missed day.
+        const dayElapsed = viewing !== '' && viewing < (day.data?.today ?? '');
+        return (
+          <article className="card" key={item.id} style={{ marginBlock: '0.5rem' }}>
+            <div className="item" style={{ borderBlockEnd: 0, paddingBlock: 0 }}>
+              <div className="item-main">
+                <div className={`item-title${item.status === 'done' ? ' done' : ''}`}>
+                  {item.ruleTitle}
+                </div>
+                <div className="item-meta">
+                  {item.ruleCalendar !== 'gregorian' && (
+                    <span className="pill hijri">{calendarLabel(item.ruleCalendar)}</span>
+                  )}
+                  {item.category && <span>{item.category}</span>}
+                  {item.dueTime && <span>due {item.dueTime}</span>}
+                </div>
+                {item.note && noteId !== item.id && <div className="muted">{item.note}</div>}
+                {noteId === item.id ? (
+                  <form
+                    style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void saveNote(item.id);
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={noteDraft}
+                      maxLength={500}
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                      placeholder="Add a note…"
+                      aria-label="Occurrence note"
+                    />
+                    <button
+                      type="submit"
+                      className="btn small primary"
+                      disabled={busyId === item.id}
+                    >
+                      Save
+                    </button>
+                    {item.note && (
+                      <button
+                        type="button"
+                        className="btn small ghost"
+                        disabled={busyId === item.id}
+                        onClick={() => void clearNote(item.id)}
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={busyId === item.id}
+                      onClick={() => setNoteId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                ) : (
+                  <div style={{ marginTop: '0.4rem' }}>
                     <button
                       type="button"
                       className="btn small ghost"
                       disabled={busyId === item.id}
-                      onClick={() => void clearNote(item.id)}
+                      onClick={() => {
+                        setNoteId(item.id);
+                        setNoteDraft(item.note ?? '');
+                      }}
                     >
-                      Clear
+                      {item.note ? 'Edit note' : 'Add note'}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className="btn small"
-                    disabled={busyId === item.id}
-                    onClick={() => setNoteId(null)}
-                  >
-                    Cancel
-                  </button>
-                </form>
-              ) : (
-                <div style={{ marginTop: '0.4rem' }}>
+                  </div>
+                )}
+              </div>
+              <div className="item-actions">
+                <div
+                  className="status-chips"
+                  role="group"
+                  aria-label={`${item.ruleTitle}: status, currently ${STATUS_LABEL[item.status]}`}
+                >
+                  {(['done', 'missed', 'skipped'] as const).map((target) => (
+                    <button
+                      key={target}
+                      type="button"
+                      className={`chip${item.status === target ? ' current' : ''} ${target}`}
+                      aria-pressed={item.status === target}
+                      disabled={
+                        busyId === item.id ||
+                        item.status === target ||
+                        (dayElapsed && !(item.status === 'missed' && target === 'skipped'))
+                      }
+                      onClick={() =>
+                        act(item.id, () =>
+                          dayElapsed && item.status === 'missed' && target === 'skipped'
+                            ? api.excuse(item.id)
+                            : api.changeStatus(item.id, target),
+                        )
+                      }
+                    >
+                      {STATUS_LABEL[target]}
+                    </button>
+                  ))}
+                </div>
+                {!dayElapsed && item.status !== 'pending' && (
                   <button
                     type="button"
                     className="btn small ghost"
                     disabled={busyId === item.id}
-                    onClick={() => {
-                      setNoteId(item.id);
-                      setNoteDraft(item.note ?? '');
-                    }}
+                    onClick={() => act(item.id, () => api.reset(item.id))}
                   >
-                    {item.note ? 'Edit note' : 'Add note'}
+                    Undo
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-            <div className="item-actions">
-              {item.status === 'pending' && (
-                <>
-                  <button
-                    type="button"
-                    className="btn small primary"
-                    disabled={busyId === item.id}
-                    onClick={() => act(item.id, () => api.markDone(item.id))}
-                  >
-                    Done
-                  </button>
-                  <button
-                    type="button"
-                    className="btn small"
-                    disabled={busyId === item.id}
-                    onClick={() => act(item.id, () => api.markMissed(item.id))}
-                  >
-                    Miss
-                  </button>
-                </>
-              )}
-              {item.status === 'done' && (
-                <button
-                  type="button"
-                  className="btn small ghost"
-                  disabled={busyId === item.id}
-                  onClick={() => act(item.id, () => api.reset(item.id))}
-                >
-                  Undo
-                </button>
-              )}
-              {item.status === 'missed' && (
-                <button
-                  type="button"
-                  className="btn small ghost"
-                  disabled={busyId === item.id}
-                  onClick={() => act(item.id, () => api.excuse(item.id))}
-                >
-                  Excuse
-                </button>
-              )}
-            </div>
-          </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </section>
   );
 }

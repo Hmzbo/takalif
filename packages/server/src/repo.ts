@@ -17,6 +17,7 @@ import {
   type GeneratorPlan,
   type LedgerCsvRow,
   type Occurrence,
+  type OccurrenceStatus,
   type PeriodReport,
   type Rule,
   type RuleVersion,
@@ -521,6 +522,40 @@ export function updateRule(db: DB, ruleId: string, input: UpdateRuleInput): Rule
   return toRule(db.prepare('SELECT * FROM rules WHERE id = ?').get(ruleId) as RuleRow);
 }
 
+/**
+ * Move an occurrence between statuses while its day is still open.
+ *
+ * Humans mis-click. Until the day closes the ledger treats `pending` as the
+ * only mutable state, so a mistake must be reversible: the route refuses once
+ * the day is elapsed, and after that settled rows are frozen as everywhere
+ * else in the ledger.
+ */
+export function changeOccurrenceStatus(
+  db: DB,
+  occurrenceId: string,
+  status: Exclude<OccurrenceStatus, 'pending'>,
+  settings: Settings,
+  now: Date = new Date(),
+): { ok: true; occurrence: Occurrence } | { ok: false; reason: 'not-found' | 'elapsed' } {
+  const existing = readOccurrence(db, occurrenceId);
+  if (!existing) return { ok: false, reason: 'not-found' };
+  if (isOccurrenceElapsed(existing, settings, now)) return { ok: false, reason: 'elapsed' };
+
+  const ts = nowIso();
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE occurrences SET status = ?, completed_at = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(status, status === 'done' ? ts : null, ts, occurrenceId);
+  })();
+  return {
+    ok: true,
+    occurrence: toOccurrence(
+      db.prepare('SELECT * FROM occurrences WHERE id = ?').get(occurrenceId) as OccurrenceRow,
+    ),
+  };
+}
+
 export function setOccurrenceStatus(
   db: DB,
   occurrenceId: string,
@@ -616,8 +651,9 @@ export function isOccurrenceElapsed(
  * The only way out of a terminal state, and only while the day is still open.
  *
  * Once the day has closed, leaving the row `pending` is meaningless: the next
- * materialisation sweep would put it straight back to `missed`. Callers must use
- * `excuseOccurrence` for a day that has already passed.
+ * materialisation sweep would put it straight back to `missed`. Prefer
+ * `changeOccurrenceStatus` for reversal between statuses; this stays for
+ * "back to due".
  */
 export function resetOccurrence(db: DB, occurrenceId: string): Occurrence | null {
   const result = db

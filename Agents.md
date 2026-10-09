@@ -84,13 +84,16 @@ UTC-midnight `Date` objects used purely as an integer carrier, so that daylight
 saving transitions cannot shift an occurrence by a day. Use the helpers in
 `dates.ts`; do not do date math by hand.
 
-### 4.2 Terminal states are frozen
+### 4.2 Terminal states are frozen against automation
 
 `done`, `missed` and `skipped` are **never** rewritten by the generator.
-`pending` is the only mutable state. The single exception is an explicit
-user-initiated reset.
+`pending` is the only state automation may change. Explicit user actions may
+reassign an occurrence between statuses, but only while its day is still open;
+after the day closes the rows are locked, with excusing a `missed` day as the
+one deliberate exit.
 
-If a change would require mutating a settled occurrence, the change is wrong.
+If a change would require mutating a settled occurrence automatically, the
+change is wrong.
 
 ### 4.3 Nothing exists before `rules.created_date`
 
