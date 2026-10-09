@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Settings, SkipPeriod } from '@takalif/core';
 import { api, ApiError } from '../api';
-import { runMutation } from '../data';
+import { runMutation, useTheme } from '../data';
 import { CALENDAR_OPTIONS } from '../format';
 import {
   pushState,
@@ -47,6 +47,13 @@ function allZones(): string[] {
   return COMMON_ZONES;
 }
 
+/** Theme choices for the Settings appearance control. */
+const THEME_OPTIONS = [
+  { id: 'system', label: 'System' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+] as const;
+
 /**
  * Shows how this device reaches the server, and — when opened via loopback —
  * what a phone on the same network needs instead. The client cannot discover
@@ -82,6 +89,7 @@ function ConnectionHint() {
 }
 
 export function SettingsView({ onChanged }: { onChanged: () => void }) {
+  const { theme, setTheme } = useTheme();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -323,6 +331,25 @@ export function SettingsView({ onChanged }: { onChanged: () => void }) {
         </Banner>
       )}
       <form onSubmit={save}>
+        <Field
+          label="Appearance"
+          hint="Light, dark, or follow the system."
+        >
+          <div className="seg" role="group" aria-label="Theme">
+            {THEME_OPTIONS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className="seg-btn"
+                aria-pressed={theme === t.id}
+                onClick={() => setTheme(t.id as typeof theme)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
         <Field label="Timezone" hint="Server-side. Your phone and laptop always agree on what today is.">
           <input
             type="text"

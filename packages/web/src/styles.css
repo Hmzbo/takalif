@@ -233,15 +233,12 @@ body {
   gap: 0.75rem;
   padding-block: 1rem;
   border-block-end: 1px solid var(--border);
-}
-
-.item:last-child {
+}.item:last-child {
   border-block-end: 0;
   padding-block-end: 0.25rem;
 }
 
-.item-main {
-  flex: 1;
+.item-main {  flex: 1;
   min-inline-size: 0;
 }
 
@@ -260,7 +257,11 @@ body {
   font-size: 0.82rem;
   display: flex;
   flex-wrap: wrap;
-  gap-inline: 0.5rem;
+  /* `gap-inline` does not exist; flex gaps are column-gap/row-gap. The
+   * invalid declaration used to silently drop every separator here. */
+  column-gap: 0.5rem;
+  row-gap: 0.2rem;
+  align-items: center;
   margin-block-start: 0.15rem;
 }
 
@@ -867,13 +868,15 @@ button:focus-visible {
   }
 
   .card {
-    padding: 0.9rem;
+    padding: 0.8rem 0.85rem;
+    border-radius: var(--radius-sm);
   }
 
   .item {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.6rem;
+    gap: 0.55rem;
+    padding-block: 0.8rem;
   }
 
   .item-actions {
@@ -882,5 +885,15 @@ button:focus-visible {
 
   .chip {
     flex: 1 1 auto;
+  }
+
+  /* The header keeps the brand; the theme control lives in Settings on a
+   * phone-width screen instead of crowding the title bar. */
+  .app-header .seg {
+    display: none;
+  }
+
+  .day-title strong {
+    font-size: 1.05rem;
   }
 }
