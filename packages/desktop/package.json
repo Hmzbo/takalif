@@ -1,0 +1,16 @@
+{
+  "name": "@takalif/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "fetch-sidecar": "node scripts/fetch-sidecar.mjs",
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "bundle": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
