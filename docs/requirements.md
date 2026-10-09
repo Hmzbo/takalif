@@ -22,11 +22,13 @@
 
 - **R2.1** The application materialises expected occurrences for every active
   rule over a bounded window around today.
-- **R2.2** The user can mark an occurrence done, missed, or reset a settled
+- **R2.2** The user can mark an occurrence done, missed, or skipped, reassign
+  it between those while its day is still open, or reset a settled
   occurrence back to pending.
 - **R2.3** An occurrence can carry a note.
 - **R2.4** Settled occurrences (`done`, `missed`, `skipped`) are never modified
-  automatically. Only an explicit user action changes them.
+  automatically. Explicit user actions may reassign them while the day is
+  open; after it closes only excusing a `missed` day remains.
 - **R2.5** A day stays open until a configurable rollover time on the following
   day, so work done late in the evening is not recorded as failure.
 - **R2.6** Occurrences whose day has already closed are materialised directly as
@@ -93,6 +95,15 @@
 - **R8.3** An ntfy fallback exists because desktop push requires the browser to
   be running. Email remains a listed destination for a later fallback.
 
+### 1.9 Pairing and companion access
+
+- **R9.1** API calls from off the machine require a pairing bearer token on
+  every route except `/api/health`. Loopback callers never need it.
+- **R9.2** A loopback-only pairing endpoint reports the machine's LAN address
+  and the token, for the companion's QR setup. It never answers off-machine.
+- **R9.3** The token comes from `TAKALIF_TOKEN` or a persisted file beside the
+  database, so pairing survives restarts.
+
 ---
 
 ## 2. Non-functional requirements
@@ -106,9 +117,11 @@
 - **NF4. Fault isolation.** One malformed rule must not prevent the rest of the
   ledger from being materialised.
 - **NF5. Single-user.** No authentication, no user table. Designed for a person
-  running their own instance.
-- **NF6. Trivial installation.** One binary or one `docker compose up`; SQLite
-  only; no external services required.
+  running their own instance. API access from off the machine additionally
+  requires the pairing bearer token; loopback stays open.
+- **NF6. Trivial installation.** One installer (desktop app), one
+  `docker compose up`, or from source; SQLite only; no external services
+  required.
 - **NF7. Testability.** The domain core is pure — no I/O, no framework — so that
   the generator and statistics are testable exhaustively without a database.
 - **NF8. No fabricated history.** Nothing is materialised before the date a rule

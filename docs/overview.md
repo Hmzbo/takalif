@@ -91,7 +91,8 @@ Takalif holds both at once.
 2. **Be honest with the user.** Adherence is reported plainly, including
    failures, but failures are never the headline. The skipped count is always
    visible so no number can be read as better than it is.
-3. **Be genuinely easy to install.** One command, one SQLite file, no account.
+3. **Be genuinely easy to install.** One installer, one command, one SQLite
+   file, no account.
 4. **Be usable by a person who does not use the Gregorian calendar as their
    primary one.** See [calendars](calendars.md).
 5. **Interoperate.** CalDAV `VTODO` with `RRULE`, plus JSON and CSV export. Your

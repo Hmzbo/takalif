@@ -231,10 +231,11 @@ Streaks, when enabled for a task: `done` extends the run, `missed` breaks it,
 Usable and in active development. Shipped: the domain core (ledger, generator,
 statistics), the HTTP API with SQLite persistence, the PWA (today, calendar,
 tasks, stats, settings), server-side reminders (web push with ntfy fallback),
-export/backup (JSON restore, CSV ledger, VTODO schedules), and Docker packaging.
+export/backup (JSON restore, CSV ledger, VTODO schedules), Docker packaging,
+a Windows desktop app (Tauri shell + bundled server), and LAN pairing auth.
 
-Still ahead: releases and versioning, multi-arch images, and wider platform
-testing.
+Still ahead: the QR pairing screen, the Android companion, releases and
+versioning, multi-arch images, and wider platform testing.
 
 Built as a personal tool first, released openly in the hope it is useful to
 someone else.

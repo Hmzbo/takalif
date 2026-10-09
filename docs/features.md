@@ -7,6 +7,9 @@ Detailed, behaviour-level descriptions. For the reasoning behind each, see the
 
 ## 1. Scheduling
 
+In the client, rules are called **Recurring tasks** — one list header, `task`
+per item. Time away is never a task. The domain names below stay as code.
+
 ### Creating a rule
 
 A rule needs a title and an RRULE. Everything else is optional.
@@ -87,13 +90,29 @@ Today · Friday 2 October 2026
 Completed items are visible in place rather than hidden, so the day reads as a
 record rather than a queue that empties.
 
+Status is a chip row per item — Done, Missed, Skipped — so a mis-tap is one
+tap away while the day is still open. After the day closes the row locks,
+except the one deliberate exit: excusing a missed day.
+
 Each occurrence can carry a short note — "gym instead", "felt strong" — set
 from the day view. Notes are annotation, not ledger state: they change no
 adherence figure and survive every materialisation.
 
 ---
 
-## 3. Skipping and holidays
+## 3. Calendar
+
+One tab after Today, defaulting to the week: seven day columns with titles
+and statuses, tapping through to the day view for check-off. The month grid
+shows status dots per day instead of titles — same jump. No time slots, no
+dragging, no event creation: it is a ledger browser, not a calendar app.
+
+Weeks start Monday; Hijri sub-labels follow the display calendar; layout
+mirrors under RTL. Pending never reads as failure, skipped stays distinct.
+
+---
+
+## 4. Skipping and holidays
 
 Marking a date range as away is one action, not one per occurrence.
 
@@ -122,7 +141,7 @@ trip and removed afterwards. Removing a range never rewrites settled rows.
 
 ---
 
-## 4. Statistics
+## 5. Statistics
 
 ### Headline
 
@@ -159,7 +178,7 @@ wall of failures:
 
 ---
 
-## 5. Reminders
+## 6. Reminders
 
 - Scheduled server-side, so they fire whether or not the client is open.
 - Per-rule reminder time. Only today's pending occurrences qualify, and each
@@ -171,7 +190,7 @@ wall of failures:
 
 ---
 
-## 6. Data you can take with you
+## 7. Data you can take with you
 
 - **JSON** — complete backup and restore.
 - **CSV** — the occurrence ledger, for spreadsheets or analysis.

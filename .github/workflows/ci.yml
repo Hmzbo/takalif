@@ -130,12 +130,19 @@ jobs:
 
           echo ""
           echo "-- create a rule, expect 201 --"
+          # The container binds off-loopback, so its gateway IP is not
+          # loopback from the server's view: every call but /health needs the
+          # pairing token the boot prints. Same reason a phone needs pairing.
+          TOKEN=$(docker logs takalif-ci 2>&1 | grep -oP 'pairing token: \K[0-9a-f]{64}' | head -1)
+          test -n "$TOKEN" || { echo "no pairing token in boot logs"; docker logs takalif-ci; exit 1; }
+          AUTH="Authorization: Bearer $TOKEN"
           CODE=$(curl -s -o /dev/null -w '%{http_code}' \
             -X POST http://127.0.0.1:8798/api/rules \
             -H 'content-type: application/json' \
+            -H "$AUTH" \
             -d '{"title":"CI Docker","rrule":"FREQ=DAILY"}')
           test "$CODE" = "201"
 
           echo "-- csv export, expect a header --"
-          curl -fsS 'http://127.0.0.1:8798/api/export/csv?from=2026-01-01&to=2026-12-31' \
+          curl -fsS -H "$AUTH" 'http://127.0.0.1:8798/api/export/csv?from=2026-01-01&to=2026-12-31' \
             | head -1 | grep -q '^rule_id,'
