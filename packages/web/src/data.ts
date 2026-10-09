@@ -24,7 +24,9 @@ export function useResource<T>(key: string, load: () => Promise<T>): Resource<T>
   useEffect(() => {
     let live = true;
     setError(null);
-    load().then(
+    // Transient startup failures (sidecar still booting, container
+    // restarting) resolve on their own; absorb them before surfacing.
+    fetchWithRetry(load).then(
       (value) => {
         if (live) setData(value);
       },
@@ -41,6 +43,29 @@ export function useResource<T>(key: string, load: () => Promise<T>): Resource<T>
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
   return { data, error, loading: data === null && error === null, refresh };
+}
+
+/**
+ * Run a loader through transient failures: connection refused while the
+ * server boots, brief network loss, 5xx blips. Retries with backoff and
+ * gives up after ~7s; client errors (4xx) surface immediately since retrying
+ * them can never help. Unmounting abandons the result but cannot cancel the
+ * in-flight request — same as the plain call it replaces.
+ */
+export async function fetchWithRetry<T>(
+  load: () => Promise<T>,
+  delays: readonly number[] = [400, 800, 1600, 3200],
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await load();
+    } catch (e) {
+      const retryable = e instanceof ApiError ? e.status === 0 || e.status >= 500 : true;
+      const wait = delays[attempt];
+      if (!retryable || wait === undefined) throw e;
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
 }
 
 /** Runs `fn`, returning its `ApiError` (if any) so callers can display it. */

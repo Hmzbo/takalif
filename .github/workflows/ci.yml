@@ -98,8 +98,19 @@ jobs:
       # Gates the packaging files the way `Build` gates the bundles: a bare
       # `node_modules` in .dockerignore once shipped absolute host symlinks
       # into the image, which no typecheck could see.
+      #
+      # Retried with backoff: shared runners periodically hit Docker Hub
+      # 429s resolving node:22-slim, which is environmental rather than a
+      # repo fault, and a single attempt would red otherwise-green PRs.
       - name: Build image
-        run: docker build -t takalif:ci .
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            if docker build -t takalif:ci .; then break; fi
+            echo "docker build attempt $i failed; backing off before retry"
+            sleep $((i * 60))
+            if [ "$i" = 5 ]; then exit 1; fi
+          done
 
       - name: Boot and probe
         shell: bash

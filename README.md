@@ -85,6 +85,18 @@ docker compose up -d --build
 Open <http://localhost:8787>. The ledger lives in a named volume and survives
 image rebuilds; take JSON backups from Settings → Data.
 
+### Desktop app (Windows)
+
+The one-click install — no Docker, no terminal. Download
+`Takalif_0.1.0_x64-setup.exe` from the
+[releases page](https://github.com/Hmzbo/takalif/releases) and run it.
+
+It bundles the same server and interface: your data lives in
+`%APPDATA%/com.takalif.desktop/takalif.sqlite`, and backups from Settings →
+Data move freely between the app, Docker, and source installs. The first
+window can take a few seconds while the bundled server starts; if it ever
+greets you with an error instead, wait a moment and press Retry.
+
 ### From source
 
 Requires Node 22+ and pnpm.
