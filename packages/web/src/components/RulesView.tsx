@@ -164,6 +164,25 @@ function TaskCard({
   onCancelConfirm: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const kebabRef = useRef<HTMLDetailsElement>(null);
+
+  // Native <details> stays open when clicking elsewhere; close on outside
+  // click and Escape so the menu behaves like every other popover.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (kebabRef.current && !kebabRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('click', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   const closeMenu = () => setMenuOpen(false);
   const editFromMenu = () => {
@@ -219,6 +238,7 @@ function TaskCard({
         </div>
       </div>
       <details
+        ref={kebabRef}
         className="kebab"
         open={menuOpen}
         onToggle={(e) => setMenuOpen((e.target as HTMLDetailsElement).open)}

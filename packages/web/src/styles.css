@@ -249,10 +249,8 @@ body {
 }
 
 .section-title {
-  font-size: 0.8rem;
+  font-size: 0.92rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--text-2);
   margin-block: 1.75rem 0.65rem;
 }
@@ -784,6 +782,29 @@ button:focus-visible {
   gap: 0.5rem;
   justify-content: flex-end;
   margin-block-start: 1rem;
+}
+
+/* Tactile push: every tap answers physically. */
+.btn:active:not(:disabled),
+.chip:active:not(:disabled),
+.btn-pill:active:not(:disabled),
+.day-chip:active,
+.seg-btn:active {
+  transform: translateY(1px);
+}
+
+.tab:active {
+  transform: scale(0.97);
+}
+
+/* Figures align vertically as they change: dates, counts, percentages. */
+.item-meta,
+.task-sched,
+.chip,
+.cal-num,
+.cal-sub,
+.stat-hero {
+  font-variant-numeric: tabular-nums;
 }
 
 /* -- banners --------------------------------------------------------- */
