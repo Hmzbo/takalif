@@ -198,3 +198,15 @@ wall of failures:
   where this one leaves off.
 
 The schema is documented, so the data is never hostage to the application.
+
+---
+
+## 8. Pairing a companion device
+
+Settings → Pair a device shows a QR code for the companion app to scan: the
+server's LAN address plus the bearer token its calls need. The code only
+exists on the server machine itself — opened from a phone, the screen says so
+instead of leaking anything. On machines with several addresses (Ethernet
+beside Tailscale or virtual switches), a picker chooses which network the QR
+points at, most-likely-phone-WiFi first. URL and token are also shown as text
+for manual entry; treat the code like a password.

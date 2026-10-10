@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bearerToken, isLoopback, lanIPv4, loadOrCreateToken } from '../src/auth.js';
+import { bearerToken, isLoopback, lanIPv4, loadOrCreateToken, pickPairingInterfaces } from '../src/auth.js';
 import { buildApp } from '../src/app.js';
 import { openDatabase, type DB } from '../src/db.js';
 import type { FastifyInstance } from 'fastify';
@@ -69,6 +69,44 @@ describe('lanIPv4', () => {
   it('returns an IPv4 string or null, never throws', () => {
     const ip = lanIPv4();
     expect(ip === null || /^(\d{1,3}\.){3}\d{1,3}$/.test(ip)).toBe(true);
+  });
+});
+
+describe('pickPairingInterfaces', () => {
+  const nic = (family: string, internal: boolean, address: string) => ({
+    family,
+    internal,
+    address,
+  });
+
+  it('ranks RFC 1918 first and drops internal and non-IPv4', () => {
+    const picked = pickPairingInterfaces({
+      Tailscale: [nic('IPv4', false, '100.88.254.127')],
+      Ethernet: [nic('IPv4', false, '192.168.100.43')],
+      Loopback: [nic('IPv4', true, '127.0.0.1'), nic('IPv6', false, 'fe80::1')],
+    });
+    expect(picked).toEqual([
+      { name: 'Ethernet', address: '192.168.100.43' },
+      { name: 'Tailscale', address: '100.88.254.127' },
+    ]);
+  });
+
+  it('ranks virtual switches below physical NICs on the same private range', () => {
+    const picked = pickPairingInterfaces({
+      'vEthernet (WSL (Hyper-V firewall))': [nic('IPv4', false, '172.19.240.1')],
+      Ethernet: [nic('IPv4', false, '192.168.100.43')],
+      Tailscale: [nic('IPv4', false, '100.88.254.127')],
+    });
+    expect(picked.map((n) => n.address)).toEqual([
+      '192.168.100.43',
+      '172.19.240.1',
+      '100.88.254.127',
+    ]);
+  });
+
+  it('returns an empty list when nothing is usable', () => {
+    expect(pickPairingInterfaces({ lo: [nic('IPv4', true, '127.0.0.1')] })).toEqual([]);
+    expect(pickPairingInterfaces({})).toEqual([]);
   });
 });
 
@@ -161,7 +199,13 @@ describe('LAN token enforcement', () => {
     try {
       const local = await app.inject({ method: 'GET', url: '/api/pairing' });
       expect(local.statusCode).toBe(200);
-      expect(JSON.parse(local.body).token).toBe(TOKEN);
+      const doc = JSON.parse(local.body);
+      expect(doc.token).toBe(TOKEN);
+      expect(Array.isArray(doc.interfaces)).toBe(true);
+      for (const nic of doc.interfaces) {
+        expect(typeof nic.name).toBe('string');
+        expect(nic.address).toMatch(/^(\d{1,3}\.){3}\d{1,3}$/);
+      }
 
       const remote = await lan('GET', '/api/pairing', TOKEN);
       expect(remote.statusCode).toBe(403);
