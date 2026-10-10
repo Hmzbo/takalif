@@ -21,6 +21,7 @@ const db = openDatabase(DB_FILE);
 // LAN pairing token: loopback callers never need it, but the moment the bind
 // opens to the LAN every /api route (except /health) demands it as a bearer
 // token. File-persisted next to the database so pairing survives restarts.
+const tokenPinned = Boolean((process.env.TAKALIF_TOKEN ?? '').trim());
 const authToken = loadOrCreateToken(dirname(DB_FILE), process.env.TAKALIF_TOKEN);
 
 const pushConfig = {
@@ -38,7 +39,7 @@ const app = buildApp(db, {
     .filter(Boolean),
   logger: process.env.LOG !== 'off',
   push: pushConfig,
-  auth: { token: authToken },
+  auth: { token: authToken, tokenDir: dirname(DB_FILE), pinned: tokenPinned },
 });
 
 if (existsSync(join(WEB_DIST, 'index.html'))) {

@@ -182,6 +182,7 @@ export const api = {
     request<{ lanIP: string | null; interfaces: { name: string; address: string }[]; token: string }>(
       '/api/pairing',
     ),
+  rotatePairing: () => request<{ token: string }>('/api/pairing/rotate', withBody('POST', {})),
 
   exportUrls: {
     backupJson: '/api/export/json',

@@ -188,7 +188,7 @@ Everything is optional; the defaults work.
 | `VAPID_PRIVATE_KEY` | — | Web-push private key. Generate a pair, keep this secret |
 | `VAPID_SUBJECT` | `mailto:takalif@localhost` | Contact URN attached to push requests |
 | `ALLOWED_ORIGINS` | — | Extra browser origins allowed to call the API |
-| `TAKALIF_TOKEN` | auto-generated | Bearer token required on LAN API calls (loopback never needs it). Without it, a `takalif.token` file next to the database persists the generated value |
+| `TAKALIF_TOKEN` | auto-generated | Bearer token required on LAN API calls (loopback never needs it). Without it, a `takalif.token` file next to the database persists the generated value. Pinned mode disables rotation: unset it to rotate |
 
 The server is single-user by design: no accounts, no user table. If you expose it
 beyond your own machine, put it behind a reverse proxy that handles

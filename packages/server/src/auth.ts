@@ -31,6 +31,8 @@ export function isLoopback(ip: string | undefined): boolean {
 
 const TOKEN_FILE = 'takalif.token';
 
+const generateToken = (): string => randomBytes(32).toString('hex');
+
 /**
  * Resolve the LAN token: explicit env wins, else a persisted file next to the
  * database, else generate-and-store. The file carries 0600 intent (best effort
@@ -53,7 +55,7 @@ export function loadOrCreateToken(dbDir: string, envToken?: string): string {
     // prevent boot. Worst case the token rotates, which only unpairs clients.
     console.warn(`Could not read token file ${path}:`, error);
   }
-  const token = randomBytes(32).toString('hex');
+  const token = generateToken();
   try {
     mkdirSync(dbDir, { recursive: true });
     writeFileSync(path, `${token}\n`, { mode: 0o600 });
@@ -61,6 +63,18 @@ export function loadOrCreateToken(dbDir: string, envToken?: string): string {
     // Same reasoning: keep serving loopback, just without persistence.
     console.warn(`Could not persist token file ${path}:`, error);
   }
+  return token;
+}
+
+/**
+ * Replace the persisted token with a fresh one. Explicit user action only
+ * (the rotate route); unlike loading, failure here is loud — the caller
+ * asked for a new code and must know it did not happen.
+ */
+export function rotateToken(dbDir: string): string {
+  const token = generateToken();
+  mkdirSync(dbDir, { recursive: true });
+  writeFileSync(join(dbDir, TOKEN_FILE), `${token}\n`, { mode: 0o600 });
   return token;
 }
 

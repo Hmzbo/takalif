@@ -18,7 +18,7 @@ import {
   type Settings,
 } from '@takalif/core';
 import type { DB } from './db.js';
-import { bearerToken, isLoopback, lanIPv4, pickPairingInterfaces } from './auth.js';
+import { bearerToken, isLoopback, lanIPv4, pickPairingInterfaces, rotateToken } from './auth.js';
 import { networkInterfaces } from 'node:os';
 import {
   archiveRule,
@@ -111,9 +111,12 @@ export interface BuildAppOptions {
    * LAN pairing token. Loopback callers never need it — only this machine can
    * reach loopback. Non-loopback callers must present it as a bearer token on
    * every /api route except /api/health, because opening the bind to the LAN
-   * would otherwise expose the whole ledger to the Wi-Fi.
+   * would otherwise expose the whole ledger to the Wi-Fi. `tokenDir` is where
+   * the token file lives, so rotation can persist it; `pinned` means the value
+   * came from the environment, in which case rotation is refused rather than
+   * silently undone on the next boot.
    */
-  auth?: { token: string };
+  auth?: { token: string; tokenDir?: string; pinned?: boolean };
 }
 
 export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance {
@@ -124,7 +127,10 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
   const app = Fastify({ logger: options.logger ?? true });
   const allowedOrigins = new Set(options.allowedOrigins ?? []);
   const clock = options.now ?? wallClock;
-  const authToken = options.auth?.token;
+  // Reassignable: rotation replaces the accepted token in place.
+  let authToken = options.auth?.token;
+  const authDir = options.auth?.tokenDir;
+  const authPinned = options.auth?.pinned ?? false;
 
   /**
    * Same-origin requests send no `Origin` header at all (curl, the bundled PWA
@@ -818,6 +824,35 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     // flap and disagree about which address is first.
     const nics = pickPairingInterfaces(networkInterfaces());
     return { lanIP: nics[0]?.address ?? null, interfaces: nics, token: authToken };
+  });
+
+  /**
+   * Replace the pairing token. Loopback-only like the pairing readout, for
+   * the same reason. Previously issued codes stop working immediately, so a
+   * code that was shown to the wrong eyes dies on demand — no file spelunking.
+   */
+  app.post('/api/pairing/rotate', async (req, reply) => {
+    if (!authToken || !authDir) return badRequest(reply, 'LAN pairing is not enabled on this server');
+    if (!isLoopback(req.ip)) {
+      reply.code(403).send({ error: 'Pairing details are only available on this machine' });
+      return;
+    }
+    if (authPinned) {
+      // Rotating would only kill the code until the next boot resurrects the
+      // pinned value. Refuse loudly instead of selling temporary revocation.
+      return conflict(
+        reply,
+        'This code is pinned by TAKALIF_TOKEN — unset it to enable rotation (the saved code then applies)',
+      );
+    }
+    try {
+      authToken = rotateToken(authDir);
+    } catch (error) {
+      req.log.error({ err: error }, 'pairing rotation failed to persist');
+      reply.code(500).send({ error: 'Could not write the new code' });
+      return;
+    }
+    return { token: authToken };
   });
 
   /**
