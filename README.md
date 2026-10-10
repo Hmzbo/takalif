@@ -1,6 +1,18 @@
-# Takalif
+<p align="center">
+  <img src="packages/web/public/icon.svg" alt="Takalif logo" width="120">
+</p>
 
-Track recurring commitments, and see how faithfully you actually kept them.
+<h1 align="center">Takalif</h1>
+
+<p align="center">
+  <strong>Track recurring commitments, and see how faithfully you actually kept them.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Hmzbo/takalif/actions/workflows/ci.yml"><img src="https://github.com/Hmzbo/takalif/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Windows-x64-0078D4?logo=windows&logoColor=white" alt="Windows x64">
+</p>
 
 Most habit trackers ask "did you do the thing today?" and give you a streak.
 Most to-do apps ask "what did you plan?" and then forget the answer. Neither one
