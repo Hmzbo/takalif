@@ -103,6 +103,10 @@
   and the token, for the companion's QR setup. It never answers off-machine.
 - **R9.3** The token comes from `TAKALIF_TOKEN` or a persisted file beside the
   database, so pairing survives restarts.
+- **R9.4** A loopback-only rotation endpoint replaces the code on demand;
+  previously issued codes stop working at once. Rotation is refused while the
+  token is pinned by `TAKALIF_TOKEN`, which would otherwise resurrect the old
+  code on the next boot.
 
 ---
 

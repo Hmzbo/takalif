@@ -101,6 +101,13 @@ function PairDevice() {
   const pairing = useResource('pairing', () => api.pairing());
   const [copied, setCopied] = useState<string | null>(null);
   const [nic, setNic] = useState<string | null>(null);
+  const [confirmRotate, setConfirmRotate] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [rotated, setRotated] = useState(false);
+  const [rotateError, setRotateError] = useState<string | null>(null);
+  // The POST response carries the new code; showing it immediately keeps the
+  // QR truthful even while the follow-up GET is still in flight.
+  const [freshToken, setFreshToken] = useState<string | null>(null);
 
   if (pairing.loading) return <Skeleton />;
   if (pairing.error || !pairing.data) {
@@ -142,7 +149,7 @@ function PairDevice() {
     // otherwise. Never invent a default — a wrong port is a dead QR.
     url = pairingUrl(active.address, window.location.port || '').replace(/\/$/, '');
     if (!url) throw new Error('unreachable');
-    token = pairing.data.token.trim();
+    token = (freshToken ?? pairing.data.token).trim();
     if (!token) throw new Error('empty token');
     // Validate through the contract so the QR holds exactly what parses.
     code = buildPairingPayload(url, token);
@@ -173,13 +180,28 @@ function PairDevice() {
     </div>
   );
 
+  async function rotate() {
+    setRotating(true);
+    setRotateError(null);
+    const err = await runMutation(async () => {
+      const fresh = await api.rotatePairing();
+      setFreshToken(fresh.token);
+      setConfirmRotate(false);
+      setRotated(true);
+      pairing.refresh();
+    });
+    setRotating(false);
+    if (err) {
+      setConfirmRotate(false);
+      setRotateError(err.message);
+    }
+  }
+
   return (
     <div>
       <p className="muted" style={{ marginBlock: '0 0.6rem' }}>
-        On the same WiFi, point the companion app's camera at the code. Anyone
-        holding it can read and rewrite everything — treat it like a password.
-        To rotate it, delete the <span className="mono">takalif.token</span> file
-        next to the database and restart the server.
+        Show this code to your phone to connect it. Only show it to your own
+        devices — anyone who scans it gets full access to everything here.
       </p>
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'start' }}>
         <div style={{ color: 'var(--text)', background: '#fff', padding: '0.6rem', borderRadius: '0.6rem' }}>
@@ -209,8 +231,47 @@ function PairDevice() {
               </select>
             </label>
           )}
-          {copyRow('url', 'Server', url)}
-          {copyRow('token', 'Token', token)}
+          {copyRow('url', 'Server address', url)}
+          {copyRow('token', 'Secret code', token)}
+          <div style={{ marginBlockStart: '0.6rem' }}>
+            {rotated && !confirmRotate && (
+              <Banner kind="info">New code ready. Old codes no longer work.</Banner>
+            )}
+            {rotateError && <Banner kind="error">{rotateError}</Banner>}
+            {confirmRotate ? (
+              <span style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={rotating}
+                  onClick={() => void rotate()}
+                >
+                  {rotating ? 'Making…' : 'Confirm — old codes stop working'}
+                </button>
+                <button
+                  type="button"
+                  className="btn small ghost"
+                  disabled={rotating}
+                  onClick={() => setConfirmRotate(false)}
+                >
+                  Keep this code
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn small ghost"
+                disabled={rotating}
+                onClick={() => {
+                  setRotated(false);
+                  setRotateError(null);
+                  setConfirmRotate(true);
+                }}
+              >
+                Make a new code
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

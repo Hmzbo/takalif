@@ -119,7 +119,7 @@ describe('LAN token enforcement', () => {
   const setup = () => {
     dir = mkdtempSync(join(tmpdir(), 'takalif-auth-'));
     db = openDatabase(join(dir, 'test.sqlite'));
-    app = buildApp(db, { logger: false, auth: { token: TOKEN } });
+    app = buildApp(db, { logger: false, auth: { token: TOKEN, tokenDir: dir } });
   };
   const teardown = () => {
     void app.close();
@@ -221,10 +221,71 @@ describe('LAN token enforcement', () => {
     try {
       const res = await plainApp.inject({ method: 'GET', url: '/api/pairing' });
       expect(res.statusCode).toBe(400);
+      const rotated = await plainApp.inject({ method: 'POST', url: '/api/pairing/rotate' });
+      expect(rotated.statusCode).toBe(400);
     } finally {
       void plainApp.close();
       plainDb.close();
       rmSync(plainDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rotation hands out a new code and kills the old one', async () => {
+    setup();
+    try {
+      const rotated = await app.inject({ method: 'POST', url: '/api/pairing/rotate' });
+      expect(rotated.statusCode).toBe(200);
+      const fresh = JSON.parse(rotated.body).token as string;
+      expect(fresh).toMatch(/^[0-9a-f]{64}$/);
+      expect(fresh).not.toBe(TOKEN);
+
+      // The persisted file agrees, so the new code survives a restart.
+      expect(loadOrCreateToken(dir)).toBe(fresh);
+
+      // Old code refused everywhere, new code admitted.
+      expect((await lan('GET', '/api/rules', TOKEN)).statusCode).toBe(401);
+      expect((await lan('GET', '/api/rules', fresh)).statusCode).toBe(200);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('rotation is loopback-only', async () => {
+    setup();
+    try {
+      const remote = await lan('POST', '/api/pairing/rotate', TOKEN);
+      expect(remote.statusCode).toBe(403);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('rotation is refused while the token is pinned by env', async () => {
+    const pinnedDir = mkdtempSync(join(tmpdir(), 'takalif-auth-'));
+    const pinnedDb = openDatabase(join(pinnedDir, 'test.sqlite'));
+    const pinnedApp = buildApp(pinnedDb, {
+      logger: false,
+      auth: { token: TOKEN, tokenDir: pinnedDir, pinned: true },
+    });
+    try {
+      const res = await pinnedApp.inject({ method: 'POST', url: '/api/pairing/rotate' });
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toMatch(/TAKALIF_TOKEN/);
+      // And the pinned code still works — nothing was touched.
+      expect(
+        (
+          await pinnedApp.inject({
+            method: 'GET',
+            url: '/api/rules',
+            remoteAddress: '192.168.1.5',
+            headers: { authorization: `Bearer ${TOKEN}` },
+          })
+        ).statusCode,
+      ).toBe(200);
+    } finally {
+      void pinnedApp.close();
+      pinnedDb.close();
+      rmSync(pinnedDir, { recursive: true, force: true });
     }
   });
 });
