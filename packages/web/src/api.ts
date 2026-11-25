@@ -115,14 +115,15 @@ async function readError(res: Response): Promise<ApiError> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const { url, headers } = buildEndpoint(path, getConnection(), isCompanion());
+  const conn = getConnection();
+  const { url, headers } = buildEndpoint(path, conn, isCompanion());
   let res: Response;
   const merged = { ...headers, ...normalizeHeaders(init?.headers) };
   try {
     res = await transport(
       url,
       { method: init?.method, body: init?.body as string | null, headers: merged },
-      getConnection()?.fingerprint,
+      conn?.fingerprint,
     );
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -148,7 +149,7 @@ export async function probeServer(url: string, fingerprint?: string): Promise<st
   try {
     res = await transport(`${url}/api/health`, {}, fingerprint);
   } catch (error) {
-    if (error instanceof ApiError) throw error;
+    if (error instanceof ApiError && error.status !== 0) throw error;
     throw new ApiError(
       0,
       `Cannot reach ${url}. Same WiFi as the server, and is it running?`,
@@ -190,10 +191,11 @@ const EXPORT_FALLBACK: Record<ExportKind, string> = {
  *  (plain anchors can carry no bearer). The caller turns blob+filename into a
  *  download, which keeps DOM out of this module and the logic testable. */
 export async function fetchExport(kind: ExportKind): Promise<{ blob: Blob; filename: string }> {
-  const { url, headers } = buildEndpoint(EXPORT_PATHS[kind], getConnection(), isCompanion());
+  const conn = getConnection();
+  const { url, headers } = buildEndpoint(EXPORT_PATHS[kind], conn, isCompanion());
   let res: Response;
   try {
-    res = await transport(url, { headers }, getConnection()?.fingerprint);
+    res = await transport(url, { headers }, conn?.fingerprint);
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(0, 'Cannot reach the server. Is it running?');

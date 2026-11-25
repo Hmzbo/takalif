@@ -88,7 +88,7 @@ export async function transport(url: string, init?: TransportInit, fingerprint?:
       return new Response(out.body, { status: out.status, headers });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.startsWith('PIN:')) {
+      if (/(?:^|\b)PIN:/.test(message)) {
         throw new ApiError(
           PIN_MISMATCH_STATUS,
           'The server answered with a certificate that does not match your pairing code. ' +

@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { buildPairingPayload, parsePairingPayload } from './pairing.js';
+import { buildPairingPayload, parsePairingPayload, type PairingPayload } from './pairing.js';
 
 /**
  * Where this client talks to. The PWA and desktop shell use same-origin
@@ -52,22 +52,30 @@ export function getConnection(): ServerConnection | null {
   }
   if (!raw) return null;
   try {
-    const doc = JSON.parse(raw) as { url?: unknown; token?: unknown; fp?: unknown };
+    const doc = JSON.parse(raw) as {
+      url?: unknown;
+      token?: unknown;
+      fingerprint?: unknown;
+      fp?: unknown;
+    };
     if (typeof doc.url !== 'string' || !doc.url || typeof doc.token !== 'string' || !doc.token) {
       return null;
     }
+    const rawFp = doc.fingerprint !== undefined ? doc.fingerprint : doc.fp;
     // A corrupt fingerprint must never produce an unpinnable https entry:
     // validate through the pairing contract, which refuses https without one.
-    if (doc.fp !== undefined && (typeof doc.fp !== 'string' || !doc.fp)) return null;
-    parsePairingPayload(
+    if (rawFp !== undefined && (typeof rawFp !== 'string' || !rawFp)) return null;
+    const payload = parsePairingPayload(
       JSON.stringify(
-        doc.fp === undefined ? { v: 1, url: doc.url, token: doc.token } : { v: 2, url: doc.url, token: doc.token, fp: doc.fp },
+        rawFp === undefined
+          ? { v: 1, url: doc.url, token: doc.token }
+          : { v: 2, url: doc.url, token: doc.token, fp: rawFp },
       ),
     );
     return {
-      url: doc.url.replace(/\/$/, ''),
-      token: doc.token,
-      ...(doc.fp === undefined ? {} : { fingerprint: doc.fp as string }),
+      url: payload.url,
+      token: payload.token,
+      ...(payload.fp === undefined ? {} : { fingerprint: payload.fp }),
     };
   } catch {
     return null;
@@ -82,11 +90,11 @@ export function setConnection(
 ): ServerConnection {
   const canonical = JSON.parse(
     buildPairingPayload(url, token, fingerprint),
-  ) as ServerConnection & { v: number };
+  ) as PairingPayload;
   const conn: ServerConnection =
-    fingerprint === undefined
+    canonical.fp === undefined
       ? { url: canonical.url, token: canonical.token }
-      : { url: canonical.url, token: canonical.token, fingerprint: canonical.fingerprint };
+      : { url: canonical.url, token: canonical.token, fingerprint: canonical.fp };
   const store = storage();
   if (!store) throw new Error('Storage is unavailable on this device');
   try {

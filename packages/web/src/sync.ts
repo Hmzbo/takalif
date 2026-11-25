@@ -113,8 +113,18 @@ export function useOfflineSnapshot(): OfflineSnapshot {
 
 /** Cache a fresh server response — every day view's loader calls this. */
 export function cacheDay(response: DayResponse): void {
+  offline = false;
   slots = slotPut(slots, daySlotKey(response.date), response, new Date().toISOString());
   emit();
+}
+
+/** Record that a network call failed with status 0 so the header bar and
+ *  reconnect loop know the server is currently unreachable. */
+export function noteServerOffline(): void {
+  if (!offline) {
+    offline = true;
+    emit();
+  }
 }
 
 export function peekDay(date: string): Slot<DayResponse> | undefined {
@@ -158,6 +168,7 @@ export function queueStatus(
   });
   if (!step.ok) return false;
   queue = step.queue;
+  offline = true;
   const slot = slotGet(slots, daySlotKey(scheduledDate)) as Slot<DayResponse> | undefined;
   if (slot) {
     slots = slotPut(

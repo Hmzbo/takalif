@@ -61,7 +61,7 @@ function initialDateParam(): string | null {
 function useSyncLoop(): void {
   const snap = useOfflineSnapshot();
   useEffect(() => {
-    if (snap.queued === 0) return;
+    if (snap.queued === 0 && !snap.offline) return;
     let cancelled = false;
     let looping = false;
     const run = async () => {
@@ -69,7 +69,9 @@ function useSyncLoop(): void {
       looping = true;
       try {
         for (;;) {
-          if (cancelled || offlineSnapshotStatic().queued === 0) return;
+          if (cancelled) return;
+          const current = offlineSnapshotStatic();
+          if (current.queued === 0 && !current.offline) return;
           const drained = await attemptReplay();
           if (!drained) return; // offline again, or a change needs review
         }
@@ -90,7 +92,7 @@ function useSyncLoop(): void {
       clearInterval(interval);
       window.removeEventListener('online', onOnline);
     };
-  }, [snap.queued, snap.syncedVersion]);
+  }, [snap.queued, snap.offline, snap.syncedVersion]);
 }
 
 export function App() {
@@ -143,18 +145,20 @@ export function App() {
   }
 
   /**
-   * The saved server is unreachable and the retry loop cannot fix it — most
-   * common cause: the server moved (reinstall, new address). Offer the one
-   * exit the user actually wants: throw away the dead pairing and scan the
-   * live QR. No Settings treasure hunt.
+   * The saved server is unreachable or rejected our credentials/pin — most
+   * common cause: the server moved (reinstall, new address, rotated code).
+   * Offer the one exit the user actually wants: throw away the dead pairing
+   * and scan the live QR. No Settings treasure hunt.
    */
   const [repairRequested, setRepairRequested] = useState<'yes' | 'no' | null>(null);
+  const errStatus = settings.error?.status;
+  const authOrPinMismatch = errStatus === 401 || errStatus === 511;
   const needsRepair =
     isCompanion() &&
+    connected &&
     getConnection() !== null &&
-    settings.data !== null &&
-    settings.error?.status === 0 &&
-    netOnline &&
+    settings.error !== null &&
+    (authOrPinMismatch || (errStatus === 0 && netOnline)) &&
     repairRequested === null;
 
   return (
@@ -163,7 +167,11 @@ export function App() {
         {needsRepair && (
           <div className="offline-bar" role="status">
             <span style={{ display: 'inline-flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <span>Your saved server is unreachable — it may have moved.</span>
+              <span>
+                {authOrPinMismatch
+                  ? 'Your pairing code or server certificate changed.'
+                  : 'Your saved server is unreachable — it may have moved.'}
+              </span>
               <button
                 type="button"
                 className="btn small"
@@ -219,7 +227,13 @@ export function App() {
 
       <main className="app">
         {!connected ? (
-          <ConnectView onConnected={() => setConnected(true)} />
+          <ConnectView
+            onConnected={() => {
+              setRepairRequested(null);
+              setConnected(true);
+              settings.refresh();
+            }}
+          />
         ) : (
           <>
         {tab === 'today' && (

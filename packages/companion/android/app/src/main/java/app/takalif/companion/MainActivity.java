@@ -7,9 +7,10 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        // The pinned HTTP transport lives native-side because the WebView
-        // cannot pin certificates; every /api call rides through it.
+        // Must be registered BEFORE super.onCreate: BridgeActivity.onCreate
+        // builds the Capacitor Bridge inside super.onCreate, so any plugin
+        // added afterwards is silently ignored.
         registerPlugin(PinnedHttpPlugin.class);
+        super.onCreate(savedInstanceState);
     }
 }

@@ -29,6 +29,13 @@ const db = openDatabase(DB_FILE);
 // token. File-persisted next to the database so pairing survives restarts.
 const tokenPinned = Boolean((process.env.TAKALIF_TOKEN ?? '').trim());
 const authToken = loadOrCreateToken(dirname(DB_FILE), process.env.TAKALIF_TOKEN);
+// Shared reference so rotating the token on the HTTP loopback listener
+// immediately updates the token checked by the LAN TLS listener.
+const authState = {
+  token: authToken,
+  tokenDir: dirname(DB_FILE),
+  pinned: tokenPinned,
+};
 
 const pushConfig = {
   publicKey: process.env.VAPID_PUBLIC_KEY || undefined,
@@ -63,7 +70,7 @@ const appOptions = (https: boolean) => ({
     .filter(Boolean),
   logger: process.env.LOG !== 'off',
   push: pushConfig,
-  auth: { token: authToken, tokenDir: dirname(DB_FILE), pinned: tokenPinned },
+  auth: authState,
   // Pairing info rides on both instances; key/cert go to the LAN one alone.
   tls: tls
     ? https
