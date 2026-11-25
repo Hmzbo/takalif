@@ -9,17 +9,17 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
 import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
@@ -59,6 +59,15 @@ public class PinnedHttpPlugin extends Plugin {
     /** Handshake failed for some other transport reason. */
     private static final String ERR_TLS = "TLS";
 
+    private final OkHttpClient baseClient = new OkHttpClient.Builder()
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(45, TimeUnit.SECONDS)
+            .build();
+
+    private String cachedFingerprint;
+    private OkHttpClient cachedPinnedClient;
+
     @PluginMethod
     public void request(PluginCall call) {
         String url = call.getString("url");
@@ -72,6 +81,12 @@ public class PinnedHttpPlugin extends Plugin {
             return;
         }
 
+        boolean isHttps = url.toLowerCase(Locale.ROOT).startsWith("https://");
+        if (isHttps && (fingerprint == null || fingerprint.trim().isEmpty())) {
+            call.reject(tag(ERR_PIN, "an https server requires a pinned certificate fingerprint — re-pair"));
+            return;
+        }
+
         Request.Builder request = new Request.Builder().url(url);
         applyHeaders(request, headers, method, body);
         if (body != null) {
@@ -81,10 +96,10 @@ public class PinnedHttpPlugin extends Plugin {
             request.method(method, RequestBody.create("", contentTypeOf(headers)));
         }
 
-        OkHttpClient client = buildClient(fingerprint);
+        OkHttpClient client = buildClient(isHttps ? fingerprint : null);
         client.newCall(request.build()).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call2, IOException error) {
-                call.reject(tag(ERR_NET, "could not reach " + describe(hostOf(url)) + ": " + error.getMessage()));
+                call.reject(classifyFailure(url, error));
             }
 
             @Override public void onResponse(Call call2, Response response) {
@@ -105,16 +120,39 @@ public class PinnedHttpPlugin extends Plugin {
         });
     }
 
-    private OkHttpClient buildClient(String pinnedSha256) {
-        OkHttpClient.Builder builder = new OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .callTimeout(45, TimeUnit.SECONDS);
-        if (pinnedSha256 == null || pinnedSha256.isEmpty()) {
-            // Plain http (v1 pairing contract): no TLS configuration at all.
-            return builder.build();
+    /**
+     * Walk the exception causal chain so a CertificateException tagged PIN:
+     * inside PinnedTrustManager is not buried under OkHttp's outer
+     * SSLHandshakeException and misclassified as a generic NET: error.
+     */
+    private String classifyFailure(String url, IOException error) {
+        for (Throwable cursor = error; cursor != null; cursor = cursor.getCause()) {
+            String msg = cursor.getMessage();
+            if (msg != null) {
+                if (msg.startsWith(ERR_PIN + ":")) {
+                    return msg;
+                }
+                if (msg.startsWith(ERR_TLS + ":")) {
+                    return msg;
+                }
+            }
         }
-        PinnedTrustManager trustManager = new PinnedTrustManager(pinnedSha256.trim().toLowerCase());
+        if (error instanceof SSLException) {
+            return tag(ERR_TLS, "TLS handshake failed with " + describe(hostOf(url)) + ": " + error.getMessage());
+        }
+        return tag(ERR_NET, "could not reach " + describe(hostOf(url)) + ": " + error.getMessage());
+    }
+
+    private synchronized OkHttpClient buildClient(String pinnedSha256) {
+        if (pinnedSha256 == null || pinnedSha256.isEmpty()) {
+            // Plain http (v1 pairing contract): reuse the base client.
+            return baseClient;
+        }
+        String normalized = pinnedSha256.trim().toLowerCase(Locale.ROOT);
+        if (normalized.equals(cachedFingerprint) && cachedPinnedClient != null) {
+            return cachedPinnedClient;
+        }
+        PinnedTrustManager trustManager = new PinnedTrustManager(normalized);
         SSLContext context;
         try {
             context = SSLContext.getInstance("TLS");
@@ -123,12 +161,14 @@ public class PinnedHttpPlugin extends Plugin {
             Log.e(TAG, "tls init failed", error);
             throw new IllegalStateException("TLS context unavailable", error);
         }
-        return builder
+        cachedFingerprint = normalized;
+        cachedPinnedClient = baseClient.newBuilder()
                 .sslSocketFactory(context.getSocketFactory(), trustManager)
                 // The fingerprint is the identity; the URL is an IP address on
                 // a LAN where hostnames are fiction. Documented in tls.ts.
                 .hostnameVerifier((hostname, session) -> true)
                 .build();
+        return cachedPinnedClient;
     }
 
     private void applyHeaders(Request.Builder request, JSObject headers, String method, String body) {

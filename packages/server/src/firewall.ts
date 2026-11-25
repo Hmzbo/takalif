@@ -43,9 +43,9 @@ export function firewallScript(): string {
   ].join(' ');
   return [
     `$n = '${ruleName}'`,
-    'if (-not (Get-NetFirewallRule -DisplayName $n -ErrorAction SilentlyContinue)) {',
-    `  Start-Process netsh -Verb RunAs -Wait -ErrorAction Stop -ArgumentList '${netshArgs.replace(/'/g, "''")}'`,
-    '}',
+    'if (Get-NetFirewallRule -DisplayName $n -ErrorAction SilentlyContinue) { exit 2 }',
+    `Start-Process netsh -Verb RunAs -Wait -ErrorAction Stop -ArgumentList '${netshArgs.replace(/'/g, "''")}'`,
+    'if (Get-NetFirewallRule -DisplayName $n -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }',
   ].join('; ');
 }
 

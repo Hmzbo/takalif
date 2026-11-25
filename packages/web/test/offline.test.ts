@@ -15,8 +15,8 @@ import {
   type DayLike,
   type QueuedStatus,
   type SlotStore,
-} from './offline';
-import { ApiError } from './api';
+} from '../src/offline.js';
+import { ApiError } from '../src/api.js';
 
 const T = (n: number) => `2026-10-${String(n).padStart(2, '0')}T09:00:00.000Z`;
 

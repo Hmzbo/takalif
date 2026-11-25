@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Settings, SkipPeriod } from '@takalif/core';
-import { api, ApiError, downloadExport, type ExportKind, type FirewallOutcome } from '../api';
+import { api, ApiError, downloadExport, type ExportKind } from '../api';
 import { getConnection } from '../connection.js';
 import { runMutation, useResource, useTheme } from '../data';
 import { buildPairingPayload, pairingUrl } from '../pairing';
@@ -107,8 +107,6 @@ function PairDevice() {
   const [rotating, setRotating] = useState(false);
   const [rotated, setRotated] = useState(false);
   const [rotateError, setRotateError] = useState<string | null>(null);
-  const [firewall, setFirewall] = useState<FirewallOutcome | null>(null);
-  const [firewallBusy, setFirewallBusy] = useState(false);
   // The POST response carries the new code; showing it immediately keeps the
   // QR truthful even while the follow-up GET is still in flight.
   const [freshToken, setFreshToken] = useState<string | null>(null);
@@ -214,15 +212,6 @@ function PairDevice() {
     }
   }
 
-  async function openFirewall() {
-    setFirewallBusy(true);
-    const err = await runMutation(async () => {
-      setFirewall(await api.openFirewall());
-    });
-    setFirewallBusy(false);
-    if (err) setFirewall({ status: 'failed', message: err.message });
-  }
-
   return (
     <div>
       <p className="muted" style={{ marginBlock: '0 0.6rem' }}>
@@ -260,6 +249,7 @@ function PairDevice() {
           )}
           {copyRow('url', 'Server address', url)}
           {copyRow('token', 'Secret code', token)}
+          {copyRow('code', 'Pairing code', code)}
           <div style={{ marginBlockStart: '0.6rem' }}>
             {rotated && !confirmRotate && (
               <Banner kind="info">New code ready. Old codes no longer work.</Banner>
@@ -297,34 +287,6 @@ function PairDevice() {
               >
                 Make a new code
               </button>
-            )}
-          </div>
-          <div style={{ marginBlockStart: '0.6rem' }}>
-            <p className="muted" style={{ marginBlock: '0 0.4rem' }}>
-              Windows blocks phones from reaching the server until a firewall
-              rule exists.
-            </p>
-            {(!firewall || firewall.status === 'declined' || firewall.status === 'failed') && (
-              <button
-                type="button"
-                className="btn small"
-                disabled={firewallBusy}
-                onClick={() => void openFirewall()}
-              >
-                {firewallBusy ? 'Asking for permission…' : 'Allow phones through the firewall'}
-              </button>
-            )}
-            {firewall?.status === 'opened' && (
-              <Banner kind="info">Firewall opened — phones on your Wi-Fi can reach the server.</Banner>
-            )}
-            {firewall?.status === 'already' && (
-              <Banner kind="info">The firewall already allows phones.</Banner>
-            )}
-            {firewall?.status === 'declined' && (
-              <Banner kind="warn">Permission was declined — the firewall stays closed.</Banner>
-            )}
-            {firewall?.status === 'failed' && (
-              <Banner kind="error">{firewall.message || 'The firewall could not be opened.'}</Banner>
             )}
           </div>
         </div>

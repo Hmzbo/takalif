@@ -1,15 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, type DayResponse } from '../api';
 import { runMutation, useResource } from '../data';
 import { calendarLabel, formatCalendarDate, formatDayLabel, shiftDate } from '../format';
 import { IconPlus } from '../icons';
 import {
-  attemptReplay,
   discardRejected,
   excuseRejected,
   isNetworkError,
   latestDaySlot,
   cacheDay,
+  noteServerOffline,
   peekDay,
   pendingFor,
   queueStatus,
@@ -122,27 +122,34 @@ export function TodayView({
   onDateChange: (date: string | null) => void;
   onNewTask: () => void;
 }) {
+  const snap = useOfflineSnapshot();
   const saved = useResource(
-    `day:${date ?? 'today'}`,
+    `day:${date ?? 'today'}:${snap.syncedVersion}`,
     () => api.day(date ?? undefined).then((response) => (cacheDay(response), response)),
   );
-  const snap = useOfflineSnapshot();
+
+  const networkFailed = Boolean(saved.error && isNetworkError(saved.error));
+  useEffect(() => {
+    if (networkFailed) noteServerOffline();
+  }, [networkFailed]);
 
   // Offline reads: the slot the last successful fetch left behind, so the
-  // day the user opened before the PC went down stays visible. When no date
-  // is picked, the most recent slot stands in for "today".
+  // day the user opened before the PC went down stays visible immediately
+  // (including while fetchWithRetry is still probing in the background).
+  // When no date is picked, the most recent slot stands in for "today".
+  const cached =
+    date !== null ? peekDay(date)?.data ?? null : (latestDaySlot()?.data ?? null);
   const fallback =
-    saved.error && isNetworkError(saved.error)
-      ? (date !== null ? peekDay(date)?.data ?? null : (latestDaySlot()?.data ?? null))
-      : null;
+    networkFailed || snap.offline || saved.loading ? cached : null;
   const effective: DayResponse | null = saved.data ?? fallback;
   const viewing = date ?? effective?.today ?? '';
   // Pending intent rides every render: a queued change must not flicker back
-  // to its old status while a refetch is in flight.
+  // to its old status while a refetch is in flight, and must update on screen
+  // immediately when queueStatus mutates snap.entries.
   const data: DayResponse | null = useMemo(() => {
     if (!effective) return null;
     return pendingFor(effective.date, effective);
-  }, [effective]);
+  }, [effective, snap.entries]);
 
   const isToday = !data || viewing === data.today;
   const [actionError, setActionError] = useState<string | null>(null);
@@ -151,7 +158,7 @@ export function TodayView({
   const [noteId, setNoteId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
 
-  const showFallback = saved.data === null && fallback !== null;
+  const showFallback = saved.data === null && cached !== null && (networkFailed || snap.offline);
 
   /**
    * The offline-capable status change. A network failure on an open day

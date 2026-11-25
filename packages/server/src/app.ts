@@ -164,10 +164,12 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
   }) as FastifyInstance;
   const allowedOrigins = new Set(options.allowedOrigins ?? []);
   const clock = options.now ?? wallClock;
-  // Reassignable: rotation replaces the accepted token in place.
-  let authToken = options.auth?.token;
-  const authDir = options.auth?.tokenDir;
-  const authPinned = options.auth?.pinned ?? false;
+  // Shared mutable state: when HTTP and HTTPS listeners share the same
+  // options.auth reference, rotating the token on loopback immediately
+  // updates what the LAN TLS listener enforces.
+  const authState = options.auth ?? null;
+  const authDir = authState?.tokenDir;
+  const authPinned = authState?.pinned ?? false;
   const tls = options.tls ?? null;
   const onWindows = options.windows ?? process.platform === 'win32';
   const firewallExecutor: FirewallExecutor = options.firewallExecutor ?? windowsFirewallExecutor;
@@ -856,7 +858,7 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
    * configured, since there is nothing to pair with.
    */
   app.get('/api/pairing', async (req, reply) => {
-    if (!authToken) return badRequest(reply, 'LAN pairing is not enabled on this server');
+    if (!authState?.token) return badRequest(reply, 'LAN pairing is not enabled on this server');
     if (!isLoopback(req.ip)) {
       reply.code(403).send({ error: 'Pairing details are only available on this machine' });
       return;
@@ -867,7 +869,7 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     return {
       lanIP: nics[0]?.address ?? null,
       interfaces: nics,
-      token: authToken,
+      token: authState.token,
       fingerprint: tls?.fingerprint ?? null,
       httpsPort: tls?.httpsPort ?? null,
     };
@@ -881,7 +883,7 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
    * spawns at boot.
    */
   app.post('/api/pairing/firewall', async (req, reply) => {
-    if (!authToken) return badRequest(reply, 'LAN pairing is not enabled on this server');
+    if (!authState?.token) return badRequest(reply, 'LAN pairing is not enabled on this server');
     if (!isLoopback(req.ip)) {
       reply.code(403).send({ error: 'Only this machine may change its own firewall' });
       return;
@@ -901,7 +903,7 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
    * code that was shown to the wrong eyes dies on demand — no file spelunking.
    */
   app.post('/api/pairing/rotate', async (req, reply) => {
-    if (!authToken || !authDir) return badRequest(reply, 'LAN pairing is not enabled on this server');
+    if (!authState?.token || !authDir) return badRequest(reply, 'LAN pairing is not enabled on this server');
     if (!isLoopback(req.ip)) {
       reply.code(403).send({ error: 'Pairing details are only available on this machine' });
       return;
@@ -915,13 +917,13 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
       );
     }
     try {
-      authToken = rotateToken(authDir);
+      authState.token = rotateToken(authDir);
     } catch (error) {
       req.log.error({ err: error }, 'pairing rotation failed to persist');
       reply.code(500).send({ error: 'Could not write the new code' });
       return;
     }
-    return { token: authToken };
+    return { token: authState.token };
   });
 
   /**
@@ -947,6 +949,7 @@ export function buildApp(db: DB, options: BuildAppOptions = {}): FastifyInstance
     // Matched on the path, not the raw URL, so a query string on an exempt
     // route cannot flip the decision.
     const pathname = request.url.split('?')[0] ?? '';
+    const authToken = authState?.token;
     if (
       authToken &&
       pathname.startsWith('/api/') &&

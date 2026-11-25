@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { probeServer } from '../src/api.js';
 import { ApiError, PIN_MISMATCH_STATUS } from '../src/errors.js';
 import { isNetworkError } from '../src/offline.js';
 import { setTransportDriver, transport } from '../src/pinnedHttp.js';
@@ -27,10 +28,10 @@ describe('transport driver', () => {
     expect(String(res.headers.get('content-type'))).toContain('json');
   });
 
-  it('maps a pin mismatch to 511 — never offline-ness, never queued', async () => {
+  it('maps a pin mismatch to 511 — even when wrapped by an outer prefix — never offline-ness', async () => {
     setTransportDriver({
       async request() {
-        throw new Error('PIN: the server certificate does not match');
+        throw new Error('SSLHandshakeException: PIN: the server certificate does not match');
       },
     });
     try {
@@ -45,13 +46,17 @@ describe('transport driver', () => {
     }
   });
 
-  it('maps a transport refusal to offline-ness (ApiError 0)', async () => {
+  it('maps a transport refusal to offline-ness (ApiError 0) and preserves URL context in probeServer', async () => {
     setTransportDriver({
       async request() {
         throw new Error('NET: could not reach the server');
       },
     });
     await expect(transport('http://h/api/health')).rejects.toMatchObject({ status: 0 });
+    await expect(probeServer('https://192.168.1.10:8788', 'a'.repeat(64))).rejects.toMatchObject({
+      status: 0,
+      message: expect.stringContaining('Cannot reach https://192.168.1.10:8788'),
+    });
   });
 
   it('keeps plain fetch semantics: an unreachable address is ApiError 0', async () => {

@@ -15,6 +15,8 @@ function fakeStorage() {
   };
 }
 
+const FP = 'a'.repeat(64);
+
 describe('server connection', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -25,14 +27,36 @@ describe('server connection', () => {
     expect(getConnection()).toBeNull();
   });
 
-  it('round-trips a valid connection', () => {
+  it('round-trips a valid v1 (http) connection', () => {
     vi.stubGlobal('localStorage', fakeStorage());
     const conn = setConnection('http://192.168.1.10:8787', 'tok123');
     expect(conn).toEqual({ url: 'http://192.168.1.10:8787', token: 'tok123' });
     expect(getConnection()).toEqual(conn);
   });
 
-  it('rejects corrupt or hostile stored content', () => {
+  it('round-trips a valid v2 (https + fingerprint) connection via setConnection and connectWithCode', () => {
+    vi.stubGlobal('localStorage', fakeStorage());
+    const conn = setConnection('https://192.168.1.10:8788', 'tok123', FP);
+    expect(conn).toEqual({
+      url: 'https://192.168.1.10:8788',
+      token: 'tok123',
+      fingerprint: FP,
+    });
+    expect(getConnection()).toEqual(conn);
+
+    clearConnection();
+    const scanned = connectWithCode(
+      JSON.stringify({ v: 2, url: 'https://192.168.1.10:8788', token: 'tok456', fp: FP }),
+    );
+    expect(scanned).toEqual({
+      url: 'https://192.168.1.10:8788',
+      token: 'tok456',
+      fingerprint: FP,
+    });
+    expect(getConnection()).toEqual(scanned);
+  });
+
+  it('rejects corrupt or hostile stored content, including unpinned https', () => {
     const store = fakeStorage();
     vi.stubGlobal('localStorage', store);
     store.setItem('takalif-server', 'not json');
@@ -40,6 +64,13 @@ describe('server connection', () => {
     store.setItem('takalif-server', JSON.stringify({ url: 'http://h', token: '' }));
     expect(getConnection()).toBeNull();
     store.setItem('takalif-server', JSON.stringify({ url: 'javascript:x', token: 't' }));
+    expect(getConnection()).toBeNull();
+    store.setItem('takalif-server', JSON.stringify({ url: 'https://192.168.1.10:8788', token: 't' }));
+    expect(getConnection()).toBeNull();
+    store.setItem(
+      'takalif-server',
+      JSON.stringify({ url: 'https://192.168.1.10:8788', token: 't', fingerprint: 'bad' }),
+    );
     expect(getConnection()).toBeNull();
   });
 
@@ -57,5 +88,6 @@ describe('server connection', () => {
     vi.stubGlobal('localStorage', fakeStorage());
     expect(() => setConnection('http://h', '')).toThrow(/token/);
     expect(() => setConnection('notaurl', 't')).toThrow();
+    expect(() => setConnection('https://h:8788', 't')).toThrow(/fingerprint/);
   });
 });

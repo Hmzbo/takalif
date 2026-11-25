@@ -125,26 +125,89 @@ describe('LAN TLS listener', () => {
 
         // A certificate that did not sign this server's key must fail the
         // handshake: the companion will compare fingerprints the same way.
-        const other = await loadOrCreateKeystore(mkdtempSync(join(tmpdir(), 'takalif-tls-')));
-        const distrust = new https.Agent({
-          ca: other.certPem,
-          checkServerIdentity: (): undefined => undefined,
-        });
-        const rejected = await new Promise<boolean>((resolve) => {
-          const req = https.request(
-            'https://127.0.0.1:9843/api/health',
-            { agent: distrust },
-            (res) => {
-              res.resume();
-              resolve(false); // handshake succeeded — wrong isolation
-            },
-          );
-          req.on('error', () => resolve(true));
-          req.end();
-        });
-        expect(rejected).toBe(true);
+        const otherDir = mkdtempSync(join(tmpdir(), 'takalif-tls-'));
+        try {
+          const other = await loadOrCreateKeystore(otherDir);
+          const distrust = new https.Agent({
+            ca: other.certPem,
+            checkServerIdentity: (): undefined => undefined,
+          });
+          const rejected = await new Promise<boolean>((resolve) => {
+            const req = https.request(
+              'https://127.0.0.1:9843/api/health',
+              { agent: distrust },
+              (res) => {
+                res.resume();
+                resolve(false); // handshake succeeded — wrong isolation
+              },
+            );
+            req.on('error', () => resolve(true));
+            req.end();
+          });
+          expect(rejected).toBe(true);
+        } finally {
+          rmSync(otherDir, { recursive: true, force: true });
+        }
       } finally {
         await app.close();
+      }
+    } finally {
+      db?.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('propagates token rotation from the HTTP loopback instance to the LAN TLS instance', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'takalif-tls-'));
+    let db: DB | null = null;
+    try {
+      const keystore = await loadOrCreateKeystore(dir);
+      db = openDatabase(join(dir, 'test.sqlite'));
+      const sharedAuth = { token: 'initial-token', tokenDir: dir };
+      const httpApp = buildApp(db, {
+        logger: false,
+        auth: sharedAuth,
+        tls: { fingerprint: keystore.fingerprint, httpsPort: 9844 },
+      });
+      const lanApp = buildApp(db, {
+        logger: false,
+        auth: sharedAuth,
+        tls: {
+          fingerprint: keystore.fingerprint,
+          httpsPort: 9844,
+          key: keystore.keyPem,
+          cert: keystore.certPem,
+        },
+      });
+      try {
+        // Rotate on the HTTP loopback instance (how the desktop webview rotates).
+        const rotated = await httpApp.inject({
+          method: 'POST',
+          url: '/api/pairing/rotate',
+        });
+        expect(rotated.statusCode).toBe(200);
+        const { token: freshToken } = JSON.parse(rotated.body) as { token: string };
+        expect(freshToken).not.toBe('initial-token');
+
+        // The LAN TLS instance must immediately reject the old token and admit the new one.
+        const oldCall = await lanApp.inject({
+          method: 'GET',
+          url: '/api/rules',
+          remoteAddress: '192.168.1.25',
+          headers: { authorization: 'Bearer initial-token' },
+        });
+        expect(oldCall.statusCode).toBe(401);
+
+        const newCall = await lanApp.inject({
+          method: 'GET',
+          url: '/api/rules',
+          remoteAddress: '192.168.1.25',
+          headers: { authorization: `Bearer ${freshToken}` },
+        });
+        expect(newCall.statusCode).toBe(200);
+      } finally {
+        await httpApp.close();
+        await lanApp.close();
       }
     } finally {
       db?.close();
